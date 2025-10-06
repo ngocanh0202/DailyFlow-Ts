@@ -1,0 +1,258 @@
+import { useContext, useEffect, useRef, useState } from 'react';
+import './OnTask.css';
+import { winDragger } from '~/ui/App';
+import { PageType } from '~/enums/PageType.enum';
+import { formatTime } from '~/ui/helpers/utils/utils';
+import { useAlert } from '~/ui/helpers/hooks/useAlert';
+import { FaPause, FaPlay, FaExpandAlt } from "react-icons/fa";
+import { MdSkipNext } from "react-icons/md";
+import { BiSkipPrevious } from "react-icons/bi";
+import { TbLayoutBottombarCollapseFilled } from "react-icons/tb";
+import { TbLayoutNavbarCollapseFilled } from "react-icons/tb";
+import { getPageSize } from '~/shared/util.page';
+import { useNavigate } from 'react-router-dom';
+import { useAppDispatch, useAppSelector } from '~/ui/store/hooks';
+import { setCurrentTaskId, setStartTimer, setTodoStatus, setStopTimer, setTimeLeft, updateTask, setTaskStatus, setDoneCurrentTask } from '~/ui/store/todo/todoSlice';
+import { TiArrowBack } from "react-icons/ti";
+import { TaskStatus } from '~/enums/TaskStatus.Type.enum';
+import { TodoStatus } from '~/enums/TodoStatus.Type.enum';
+
+const OnTask = () => {
+  const navigate = useNavigate();
+  const { onMakeDraggable, onClearDraggable } = useContext(winDragger);
+  const dragElement = useRef<(HTMLDivElement | null)>(null);
+  const textContainerRef = useRef<HTMLDivElement>(null);
+  const textRef = useRef<HTMLDivElement>(null);
+  const [shouldAnimate, setShouldAnimate] = useState(false);
+  const [isTitleHovered, setisTitleHovered] = useState(false);
+  const [isTimeHovered, setisTimeHovered] = useState(false);
+  const [isExpanded, setIsExpanded] = useState<boolean>(false);
+  const dispatch = useAppDispatch();
+  const todo = useAppSelector((state) => state.todoflow);
+  const {  
+    notify
+  } = useAlert();
+
+  useEffect(() => {
+    const getHeadTask = async () => {
+      if (!todo) {
+        navigate('/dashboard');
+        return;
+      }
+      if (!todo.currentTaskId){
+        const firstTaskId = todo.taskIds[0];
+        dispatch(setCurrentTaskId(firstTaskId));
+      }
+      startTimer();
+    }
+
+    getHeadTask();
+    handleToWinOnTop(true);
+  }, []);
+
+  useEffect(() => {
+    if (textContainerRef.current && textRef.current) {
+      const containerWidth = textContainerRef.current.offsetWidth;
+      const textWidth = textRef.current.scrollWidth;
+      setShouldAnimate(textWidth > containerWidth);
+    }
+
+    const handleToCheckChangeTask = () => {
+      if (todo.currentTaskId && todo.tasks[todo.currentTaskId].status === TaskStatus.COMPLETED) {
+        let isChanged = handleChangeTask(true, TaskStatus.COMPLETED);
+        if (!isChanged && todo) {
+            dispatch(setTodoStatus(TodoStatus.STOP));
+        }
+      }
+    }
+
+    handleToCheckChangeTask();
+
+  }, [todo]);
+
+  useEffect(() => {
+    const checkTimeEst = async () => {
+      if (!todo.currentTaskId || !todo) return;
+      let currEstTime = todo.tasks[todo.currentTaskId]?.estimatedTime;
+      if (todo.currentTaskId && todo.timeLeft === currEstTime && currEstTime > 0) {
+        try {
+          await notify('Deadline Approaching', 'You are getting close to the deadline. Please complete your task on time.');
+        } catch (err) {
+          console.error('Failed to show notification:', err);
+        }
+        pauseTimer();
+      }
+    }
+    checkTimeEst();
+    
+  }, [todo.timeLeft]);
+
+  useEffect(() => {
+    const handleUpdateTodo = async () => {
+      if (todo) {
+        try {
+          await window.electronAPI.todoUpdate(todo.id, todo);
+          if (todo.status === TodoStatus.STOP || todo.status === TodoStatus.START_ON_TODO) {
+            handleToWinOnTop(false);
+            navigate(`/todoflow/${todo.id}`);
+          }
+        } catch (err) {
+          console.error('Failed to update todo:', err);
+        }
+      }
+    }
+    handleUpdateTodo();
+  }, [todo.status]);
+
+  useEffect(() => {
+    const handleToResize = async () => {
+      if (dragElement.current){
+        let pageType = PageType.ONTASK;
+        if (isExpanded) {
+          pageType = PageType.ONTASK_EXPANDED;
+        }
+        onMakeDraggable({ elements: [{element: dragElement.current, pageType: pageType}] });
+        const {width, height} = getPageSize(pageType);
+        await window.electronAPI.smoothResizeAndMove('main', width, height, 30);
+      }
+    }
+    handleToResize();
+  }, [isExpanded]);
+
+  const startTimer = () => {
+    dispatch(setStartTimer(setInterval(() => {
+      dispatch(setTimeLeft(undefined));
+    }, 1000)));
+  };
+
+  const pauseTimer = () => {
+    const currTaskStatus = todo.currentTaskId ? todo.tasks[todo.currentTaskId]?.status : null;
+    if (currTaskStatus === TaskStatus.IN_PROGRESS && todo.timer && todo.currentTaskId) {
+      dispatch(setStopTimer());
+    }
+  }
+
+  const handleExpand = () => {
+    onClearDraggable([dragElement.current!]);
+    setIsExpanded(prev => !prev);
+  }
+
+  const handleChangeTask = (isNext: boolean, _status: TaskStatus) => {
+    if (todo && todo.currentTaskId) {
+      const currentIndex = todo.taskIds.indexOf(todo.currentTaskId);
+      const nextIndex = isNext ? currentIndex + 1 : currentIndex - 1;
+      if (nextIndex >= 0 && nextIndex < todo.taskIds.length) {
+        const nextTaskId = todo.taskIds[nextIndex];
+        dispatch(setTaskStatus(_status));
+        dispatch(setCurrentTaskId(nextTaskId));
+        startTimer();
+        return true;
+      }
+      else
+        return false;
+    }
+    return false;
+  }
+
+  const handleToCheckSubTask = (subTasks: SubTask, index: number) => {
+    if (!todo.currentTaskId) return;
+    const updatedSubTasks = todo.tasks[todo.currentTaskId].subTasks.map((st, idx) =>
+      idx === index ? { ...st, completed: !st.completed } : st
+    );
+    const updatedTask = { ...todo.tasks[todo.currentTaskId], subTasks: updatedSubTasks };
+    dispatch(updateTask({ id: todo.currentTaskId, updates: updatedTask }));
+  }
+
+  const handleDoneTask = () => {
+    if (todo.currentTaskId) {
+      dispatch(setDoneCurrentTask());
+    }
+  }
+
+  const handleToWinOnTop = async (isTop: boolean) => {
+    await window.electronAPI.setWindowAlwaysOnTop('main', isTop);
+  }
+
+
+  return (
+    <div className='h-full'>
+      <div className={` flex gap-2 justify-between items-center px-1 sticky top-3 z-50`} ref={dragElement}>
+        <div>
+          <TiArrowBack className='cursor-pointer animate-pop' onClick={() => {
+            dispatch(setTodoStatus(TodoStatus.START_ON_TODO));
+          }}/>
+        </div>
+        <div 
+          className='w-1 flex-5 overflow-hidden whitespace-nowrap' 
+          ref={textContainerRef}
+          onMouseEnter={() => setisTitleHovered(true)}
+          onMouseLeave={() => setisTitleHovered(false)}
+        >
+          <div
+            ref={textRef}
+            className={shouldAnimate && isTitleHovered ? 'animate-marquee' : 'truncate'}
+          >
+            {todo.currentTaskId ? todo.tasks[todo.currentTaskId].title : ''}
+          </div>
+        </div>
+        <div 
+          className='flex-1 flex items-center h-full'
+          onMouseEnter={() => setisTimeHovered(true)}
+          onMouseLeave={() => setisTimeHovered(false)}
+        >
+          {
+            !isTimeHovered ? 
+              <span className='font-bold'>{todo.timeLeft != null ? formatTime(todo.timeLeft) : 'N/A'}</span> : 
+              <div className='flex gap-1 justify-between items-center w-full'>
+                <button className='btn btn-primary h-[10px] w-[1px]' onClick={handleDoneTask}>Done!</button>
+                <BiSkipPrevious className='cursor-pointer animate-pop' onClick={() => {handleChangeTask(false, TaskStatus.PAUSED);}}/>
+                {todo.currentTaskId && todo.tasks[todo.currentTaskId]?.status === TaskStatus.PAUSED ? 
+                  <FaPlay
+                    className='cursor-pointer animate-pop'
+                    onClick={() => {
+                      if (todo.currentTaskId) {
+                        startTimer();
+                      }
+                    }}
+                  />
+                  :
+                  <FaPause className='cursor-pointer animate-pop' onClick={() => {pauseTimer();}}/> 
+                }
+                <MdSkipNext className='cursor-pointer animate-pop' onClick={() => {handleChangeTask(true, TaskStatus.PAUSED);}}/>
+                {
+                  isExpanded ?
+                  <TbLayoutNavbarCollapseFilled className='cursor-pointer animate-pop' onClick={handleExpand}/>
+                  :
+                  <TbLayoutBottombarCollapseFilled className='cursor-pointer animate-pop' onClick={handleExpand}/>
+                }
+                
+              </div>
+          }
+        </div>
+      </div>
+      {isExpanded && todo.currentTaskId && todo.tasks[todo.currentTaskId]?.subTasks
+        ? 
+          <div className='card mt-5 h-[135px] ml-2 mr-2 flex flex-col gap-2 overflow-auto' style={{padding: '5px'}}>
+            {todo.tasks[todo.currentTaskId].subTasks.map((subTask, index) => (
+              <div key={index} className={`w-full px-1`}>
+                <div className="flex items-center gap-1 w-full">
+                  <input type="checkbox" className="checkbox" checked={subTask.completed}
+                    onChange={() => {
+                      handleToCheckSubTask(subTask, index);
+                    }}
+                  />
+                  <div className="flex-1">
+                    <div className="truncate">{subTask.title}</div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        : null
+      }
+
+    </div>
+  );
+};
+
+export default OnTask;
