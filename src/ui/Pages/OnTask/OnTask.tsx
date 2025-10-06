@@ -2,9 +2,9 @@ import { useContext, useEffect, useRef, useState } from 'react';
 import './OnTask.css';
 import { winDragger } from '~/ui/App';
 import { PageType } from '~/enums/PageType.enum';
-import { formatTime } from '~/ui/helpers/utils/utils';
+import { formatTime, getOnTopRightInScreen } from '~/ui/helpers/utils/utils';
 import { useAlert } from '~/ui/helpers/hooks/useAlert';
-import { FaPause, FaPlay, FaExpandAlt } from "react-icons/fa";
+import { FaPause, FaPlay } from "react-icons/fa";
 import { MdSkipNext } from "react-icons/md";
 import { BiSkipPrevious } from "react-icons/bi";
 import { TbLayoutBottombarCollapseFilled } from "react-icons/tb";
@@ -13,7 +13,7 @@ import { getPageSize } from '~/shared/util.page';
 import { useNavigate } from 'react-router-dom';
 import { useAppDispatch, useAppSelector } from '~/ui/store/hooks';
 import { setCurrentTaskId, setStartTimer, setTodoStatus, setStopTimer, setTimeLeft, updateTask, setTaskStatus, setDoneCurrentTask } from '~/ui/store/todo/todoSlice';
-import { TiArrowBack } from "react-icons/ti";
+import { IoChevronBack } from "react-icons/io5";
 import { TaskStatus } from '~/enums/TaskStatus.Type.enum';
 import { TodoStatus } from '~/enums/TodoStatus.Type.enum';
 
@@ -113,7 +113,9 @@ const OnTask = () => {
         }
         onMakeDraggable({ elements: [{element: dragElement.current, pageType: pageType}] });
         const {width, height} = getPageSize(pageType);
-        await window.electronAPI.smoothResizeAndMove('main', width, height, 30);
+        const { width: currentWidth, height: currentHeight} = await window.electronAPI.getUserScreenSize();
+        await window.electronAPI.smoothResizeAndMove('main', width, height, 24, 
+          getOnTopRightInScreen(currentWidth, currentHeight, width, height));
       }
     }
     handleToResize();
@@ -176,12 +178,10 @@ const OnTask = () => {
 
   return (
     <div className='h-full'>
-      <div className={` flex gap-2 justify-between items-center px-1 sticky top-3 z-50`} ref={dragElement}>
-        <div>
-          <TiArrowBack className='cursor-pointer animate-pop' onClick={() => {
+      <div className={`flex gap-2 justify-between items-center px-1 sticky top-3 z-50`} ref={dragElement}>
+        <IoChevronBack className='cursor-pointer animate-pop' onClick={() => {
             dispatch(setTodoStatus(TodoStatus.START_ON_TODO));
           }}/>
-        </div>
         <div 
           className='w-1 flex-5 overflow-hidden whitespace-nowrap' 
           ref={textContainerRef}

@@ -4,12 +4,15 @@ import Alert from '~/ui/components/Alert/Alert';
 import AlertSystemExample from '~/ui/components/AlertSystem/AlertSystemExample';
 import { getPageSize } from '~/shared/util.page';
 import { PageType } from '~/enums/PageType.enum';
+import { getOnMiddleInScreen } from '~/ui/helpers/utils/utils';
 
 const Dashboard = () => {
   useEffect(() =>{
     const handleToResize = async () => {
       const {width, height} = getPageSize(PageType.MAIN);
-      await window.electronAPI.smoothResizeAndMove('main', width, height, 60);
+      const { width: currentWidth, height: currentHeight} = await window.electronAPI.getUserScreenSize();
+      await window.electronAPI.smoothResizeAndMove('main', width, height, 60, 
+        getOnMiddleInScreen(currentWidth, currentHeight, width, height));
     }
     handleToResize();
   },[])

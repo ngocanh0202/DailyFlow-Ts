@@ -38,3 +38,27 @@ export function calculateProgressWidth(completed: number, total: number): string
 export function calculateTotalEstimatedTime(tasks: Task[]): number {
     return tasks.reduce((total, task) => total + task.estimatedTime, 0);
 }
+
+export function getOnMiddleInScreen(screenWidth: number, screenHeight: number, windowWidth: number, windowHeight: number) {
+    const x = (screenWidth - windowWidth) / 2;
+    const y = (screenHeight - windowHeight) / 2;
+    return { x, y };
+}
+
+export function getOnLeftInScreen(screenWidth: number, screenHeight: number, windowWidth: number, windowHeight: number) {
+    const x = (screenWidth - windowWidth) / 12;
+    const y = (screenHeight - windowHeight) / 2;
+    return { x, y };
+}
+
+export function getOnTopLeftInScreen(screenWidth: number, screenHeight: number, windowWidth: number, windowHeight: number) {
+    const x = (screenWidth - windowWidth) / 12;
+    const y = (screenHeight - windowHeight) / 12;
+    return { x, y };
+}
+
+export function getOnTopRightInScreen(screenWidth: number, screenHeight: number, windowWidth: number, windowHeight: number) {
+    const x = screenWidth - windowWidth - (screenWidth - windowWidth) / 12;
+    const y = (screenHeight - windowHeight) / 12;
+    return { x, y };
+}

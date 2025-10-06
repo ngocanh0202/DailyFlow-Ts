@@ -2,7 +2,7 @@ import { useNavigate } from 'react-router-dom';
 import { IoAddCircleOutline } from "react-icons/io5";
 import { useContext, useEffect, useRef, useState } from "react";
 import Task from "~/ui/components/Task/Task";
-import { calculateProgressWidth, formatTime, generateId } from "~/ui/helpers/utils/utils";
+import { calculateProgressWidth, formatTime, generateId, getOnLeftInScreen } from "~/ui/helpers/utils/utils";
 import { useAppSelector, useAppDispatch } from "~/ui/store/hooks";
 import { 
   initializeTodoFlow, 
@@ -49,7 +49,9 @@ const Todoflow = () => {
     }
     const handleToResize = async () => {
       const {width, height} = getPageSize(PageType.TODOFLOW);
-      await window.electronAPI.smoothResizeAndMove('main', width, height, 60);
+      const { width: currentWidth, height: currentHeight} = await window.electronAPI.getUserScreenSize();
+      await window.electronAPI.smoothResizeAndMove('main', width, height, 60, 
+        getOnLeftInScreen(currentWidth, currentHeight, width, height));
     }
     initDrag();
     handleToResize();
