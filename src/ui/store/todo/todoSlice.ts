@@ -1,7 +1,6 @@
-import { createSlice, PayloadAction, configureStore  } from '@reduxjs/toolkit';
+import { createSlice, PayloadAction  } from '@reduxjs/toolkit';
 import { TaskStatus } from '~/enums/TaskStatus.Type.enum';
 import { TodoStatus } from '~/enums/TodoStatus.Type.enum';
-import { formatTime } from '~/ui/helpers/utils/utils';
 
 const initialState: TodoFlow = {
   id: '',
@@ -96,6 +95,17 @@ const todoflowSlice = createSlice({
 
     setTodoStatus: (state, action: PayloadAction<TodoStatus>) => {
       state.status = action.payload;
+      if (state.status === TodoStatus.START_ON_PROGRESS){
+        if (state.taskCompleted === state.taskTotal) {
+          state.currentTaskId = undefined;
+          state.timeLeft = 0;
+          state.taskIds.forEach(taskId => {
+            state.tasks[taskId].status = TaskStatus.NOT_STARTED;
+            state.tasks[taskId].actualTime = 0;
+          });
+          state.taskCompleted = 0;
+        }
+      }
     },
 
     setTaskStatus: (state, action: PayloadAction<TaskStatus>) => {
@@ -146,15 +156,19 @@ const todoflowSlice = createSlice({
 
     setStopTimer: (state) => {
       if (state.timer) {
-        state.tasks[state.currentTaskId as string].status = TaskStatus.PAUSED;
+        const currentTaskStatus =  state.tasks[state.currentTaskId as string].status;
+        if (currentTaskStatus === TaskStatus.IN_PROGRESS) {
+          state.tasks[state.currentTaskId as string].status = TaskStatus.PAUSED;
+        }
         clearInterval(state.timer);
         state.timer = null;
       }
     },
 
-    setDoneCurrentTask: (state) => {
+    setDoneAndNextTask: (state) => {
       if (state.currentTaskId && state.tasks[state.currentTaskId]) {
         state.tasks[state.currentTaskId].status = TaskStatus.COMPLETED;
+        state.status = TodoStatus.START_ON_PROGRESS;
         const currentIndex = state.taskIds.indexOf(state.currentTaskId);
         const nextIndex = (currentIndex + 1) % state.taskIds.length;
         const nextTaskId = state.taskIds[nextIndex];
@@ -173,6 +187,11 @@ const todoflowSlice = createSlice({
             clearInterval(state.timer);
             state.timer = null;
           }
+          state.taskCompleted = 0;
+          state.taskIds.forEach(taskId => {
+            state.tasks[taskId].status = TaskStatus.NOT_STARTED;
+            state.tasks[taskId].actualTime = 0;
+          });
         }
       }
     },
@@ -180,10 +199,11 @@ const todoflowSlice = createSlice({
     setChangeCurrentTask: (state, action: PayloadAction<{ isNext: boolean; status: TaskStatus }>) => {
       const { isNext, status } = action.payload;
       if (state.currentTaskId) {
-        const currentIndex = state.taskIds.indexOf(state.currentTaskId);
+        const incompleteTaskIds = state.taskIds.filter(id => state.tasks[id].status !== TaskStatus.COMPLETED);
+        const currentIndex = incompleteTaskIds.indexOf(state.currentTaskId);
         const nextIndex = isNext ? currentIndex + 1 : currentIndex - 1;
-        if (nextIndex >= 0 && nextIndex < state.taskIds.length) {
-          const nextTaskId = state.taskIds[nextIndex];
+        if (nextIndex >= 0 && nextIndex < incompleteTaskIds.length) {
+          const nextTaskId = incompleteTaskIds[nextIndex];
           state.tasks[state.currentTaskId].status = status;
           state.currentTaskId = nextTaskId;
           state.timeLeft = state.tasks[nextTaskId]?.actualTime || 0;
@@ -208,7 +228,7 @@ export const {
   setTimeLeft,
   setStartTimer,
   setStopTimer,
-  setDoneCurrentTask,
+  setDoneAndNextTask,
   setChangeCurrentTask
 } = todoflowSlice.actions;
 

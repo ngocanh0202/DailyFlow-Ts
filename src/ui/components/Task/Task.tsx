@@ -187,7 +187,7 @@ const Task = ({ taskId, index, triggerValidation = false}: TaskProps) => {
           <div className="flex-1">
             <input 
               type="text" 
-              className={`input w-full ${titleError ? 'border-red-500' : ''}`} 
+              className={`input w-full ${titleError ? 'input-error' : ''}`} 
               value={task?.title} 
               placeholder="Task title"
               onChange={(e) => handleTaskChange('title', e.target.value)}
@@ -198,7 +198,7 @@ const Task = ({ taskId, index, triggerValidation = false}: TaskProps) => {
         </div>
         <div className="relative flex items-center group">
           <button className="btn ">...</button>
-          <div className="absolute right-[-5px] top-[20px] context-menu hidden group-hover:block">
+          <div className="absolute right-[-5px] top-[-5px] context-menu hidden group-hover:block">
             <div className="context-menu-item" onClick={() => handleOrderTask(index, index - 1)}>
               <i><FaCaretUp /></i> Move up
             </div>
@@ -259,7 +259,7 @@ const Task = ({ taskId, index, triggerValidation = false}: TaskProps) => {
                     ref={(el) => inputRefs.current[index] = el}
                     type="text"
                     placeholder="Subtask title"
-                    className={`input w-full ${subTaskErrors[index] ? 'border-red-500' : ''}`}
+                    className={`input w-full ${subTaskErrors[index] ? 'input-error' : ''}`}
                     value={subTask.title}
                     onChange={(e) => handleSubTaskChange(index, e.target.value)}
                     onBlur={() => handleSubTaskBlur(index)}

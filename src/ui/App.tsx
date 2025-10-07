@@ -141,7 +141,6 @@ function App() {
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/setting" element={<Settings />} />
             <Route path="/todoflow" element={<Todoflow />} />
-            <Route path="/todoflow/:id" element={<Todoflow />} />
             <Route path="/ontask" element={<OnTask />} />
             <Route path="*" element={<div>404 Not Found</div>} />
           </Routes>

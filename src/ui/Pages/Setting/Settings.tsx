@@ -17,7 +17,7 @@ const Settings = () => {
   },[])
   return (
     <div className="dashboard-container">
-
+      <p className='text-lg'>Coming Soon...</p>
     </div>
   );
 };

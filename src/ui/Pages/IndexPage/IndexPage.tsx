@@ -24,10 +24,6 @@ const IndexPage = () => {
     navigate('/dashboard');
   };
 
-  const openSettings = () => {
-    navigate('/setting');
-  };
-
   return (
     <div className="h-full flex flex-col items-center justify-center">
       <header className="text-center mb-5">

@@ -3,21 +3,35 @@ import { formatTime } from '~/ui/helpers/utils/utils';
 import { BiSkipPrevious } from 'react-icons/bi';
 import { FaPause, FaPlay } from 'react-icons/fa';
 import { MdSkipNext } from 'react-icons/md';
+import { IoPlaySkipForward } from "react-icons/io5";
 import { TaskStatus } from '~/enums/TaskStatus.Type.enum';
+import myGif from '~/ui/assets/BocchiKitaGIF.gif';
 
 interface TaskPlayerProps {
   task: Task;
+  isDoneTodo: boolean;
+  isTimer: boolean;
   onStartTask?: () => void;
   onPauseTask?: () => void;
   onDoneTask: () => void;
+  onDoneAndNextTask: () => void;
   onChangeTask: (next: boolean, status: string) => void;
 }
 
-const TaskPlayer = ({ task, onStartTask, onPauseTask, onDoneTask, onChangeTask }: TaskPlayerProps) => {
+const TaskPlayer = ({ 
+  task, 
+  isDoneTodo,
+  isTimer,
+  onStartTask, 
+  onPauseTask, 
+  onDoneTask, 
+  onDoneAndNextTask,
+  onChangeTask 
+}: TaskPlayerProps) => {
   const textContainerRef = useRef<HTMLDivElement>(null);
   const textRef = useRef<HTMLDivElement>(null);
-  const [isTitleHovered, setisTitleHovered] = useState(false);
-  const [isTimeHovered, setisTimeHovered] = useState(false);
+  const [isTitleHovered, setIsTitleHovered] = useState(false);
+  const [isTimeHovered, setIsTimeHovered] = useState(false);
   const [shouldAnimate, setShouldAnimate] = useState(false);
 
   useEffect(() => {
@@ -28,45 +42,91 @@ const TaskPlayer = ({ task, onStartTask, onPauseTask, onDoneTask, onChangeTask }
     }
   }, [task.title]);
 
+  const handlePreviousTask = () => {
+    onChangeTask(false, TaskStatus.PAUSED);
+  };
+
+  const handleNextTask = () => {
+    onChangeTask(true, TaskStatus.PAUSED);
+  };
+
+  const isCompleted = task.status === TaskStatus.COMPLETED;
+  const isPaused = isTimer;
+
+  if (isCompleted) {
+    return (
+      <div className="card primary flex flex-col gap-3 justify-center items-center mt-3" style={{ padding: '1rem 1.5rem' }}>
+        <p className='font-bold'>Congratulations! You've completed the task.</p>
+        <img 
+          src={myGif} 
+          alt="Task completed" 
+          className="w-100 h-45 object-contain"
+        />
+        <p className='font-bold'>{task.title}</p>
+        <button className="btn btn-primary" onClick={onDoneAndNextTask}>
+          {isDoneTodo ? 'All Done!' : 'Next Task'}
+        </button>
+      </div>
+    );
+  }
+
   return (
-    <div className={`card primary flex gap-2 justify-between items-center mt-3`} style={{padding: '0.5rem 1.5rem'}}>
-        <div 
-          className='w-1 flex-5 overflow-hidden whitespace-nowrap' 
-          ref={textContainerRef}
-          onMouseEnter={() => setisTitleHovered(true)}
-          onMouseLeave={() => setisTitleHovered(false)}
+    <div className="card primary flex gap-2 justify-between items-center mt-3" style={{ padding: '0.5rem 1.5rem' }}>
+      <div 
+        className="w-1 flex-5 overflow-hidden whitespace-nowrap" 
+        ref={textContainerRef}
+        onMouseEnter={() => setIsTitleHovered(true)}
+        onMouseLeave={() => setIsTitleHovered(false)}
+      >
+        <div
+          ref={textRef}
+          className={shouldAnimate && isTitleHovered ? 'animate-marquee' : 'truncate'}
         >
-          <div
-            ref={textRef}
-            className={shouldAnimate && isTitleHovered ? 'animate-marquee' : 'truncate'}
-          >
-            {task.title}
-          </div>
-        </div>
-        <div 
-          className='flex-1 flex items-center h-full'
-          onMouseEnter={() => setisTimeHovered(true)}
-          onMouseLeave={() => setisTimeHovered(false)}
-        >
-          {
-            !isTimeHovered ? 
-              <span className='font-bold'>{formatTime(task.actualTime)}</span> : 
-              <div className='flex gap-1 justify-between items-center w-full'>
-                <button className='btn btn-primary h-[10px] w-[1px]' onClick={onDoneTask}>Done!</button>
-                <BiSkipPrevious className='cursor-pointer animate-pop' onClick={() => {onChangeTask(false, TaskStatus.PAUSED);}}/>
-                {task.status === TaskStatus.PAUSED ? 
-                  <FaPlay
-                    className='cursor-pointer animate-pop'
-                    onClick={onStartTask}
-                  />
-                  :
-                  <FaPause className='cursor-pointer animate-pop' onClick={onPauseTask} />
-                }
-                <MdSkipNext className='cursor-pointer animate-pop' onClick={() => {onChangeTask(true, TaskStatus.PAUSED);}}/>           
-              </div>
-          }
+          {task.title}
         </div>
       </div>
+
+      <div 
+        className="flex-1 flex items-center h-full"
+        onMouseEnter={() => setIsTimeHovered(true)}
+        onMouseLeave={() => setIsTimeHovered(false)}
+      >
+        {!isTimeHovered ? (
+          <span className="font-bold">{formatTime(task.actualTime)}</span>
+        ) : (
+          <div className="flex gap-1 justify-between items-center w-full">
+            <button 
+              className="btn btn-primary h-[10px] w-[1px] text-sm" 
+              onClick={onDoneTask}
+            >
+              Done!
+            </button>
+            
+            <BiSkipPrevious 
+              className="cursor-pointer animate-pop" 
+              onClick={handlePreviousTask}
+            />
+            
+            {isPaused ? (
+              <FaPlay
+                className="cursor-pointer animate-pop"
+                onClick={onStartTask}
+              />
+            ) : (
+              <FaPause 
+                className="cursor-pointer animate-pop" 
+                onClick={onPauseTask} 
+              />
+            )}
+            
+            <MdSkipNext 
+              className="cursor-pointer animate-pop" 
+              onClick={handleNextTask}
+            />           
+          </div>
+        )}
+      </div>
+    </div>
   );
 };
 

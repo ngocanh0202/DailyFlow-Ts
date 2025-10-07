@@ -9,11 +9,10 @@ import {
 } from "react-icons/io5";
 import { FaTasks } from "react-icons/fa";
 import './DefaultLayout.css';
-import WindowDragger from '../helpers/utils/WindowDragger';
 import { PageType } from '~/enums/PageType.enum';
-import { getPageSize } from '~/shared/util.page';
 import { useAppDispatch } from '../store/hooks';
 import { initializeTodoFlow } from '../store/todo/todoSlice';
+import TaskCart from '../components/TaskCart/taskCart';
 
 interface DefaultLayoutProps {
   children: ReactNode;
@@ -43,7 +42,6 @@ const DefaultLayout = ({ children }: DefaultLayoutProps) => {
     }
 
     initDrag();
-
     return () => {
       onDestroyDragger();
     };
@@ -53,7 +51,7 @@ const DefaultLayout = ({ children }: DefaultLayoutProps) => {
     <div className="layout-container">
       <nav className="sidebar" ref={sidebar}>
         <div className="nav-top">
-          <button className="btn-icon nav-btn" onClick={() => navigate('/')}>
+          <button className="btn-icon nav-btn" onClick={() => navigate('/dashboard')}>
             <IoHomeOutline />
           </button>
           <button className="btn btn-primary h-[25px]" onClick={() => {
@@ -75,6 +73,7 @@ const DefaultLayout = ({ children }: DefaultLayoutProps) => {
       <main className="main-content-area">
         {children}
       </main>
+      <TaskCart className='custom-display-none' />
     </div>
   );
 };

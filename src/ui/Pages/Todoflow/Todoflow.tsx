@@ -13,18 +13,21 @@ import {
   setStartTimer,
   setTimeLeft,
   setCurrentTaskId,
-  setDoneCurrentTask,
+  setDoneAndNextTask,
   setChangeCurrentTask,
+  setTaskStatus,
 } from "~/ui/store/todo/todoSlice";
 import { useAlert } from "~/ui/helpers/hooks/useAlert";
 import { getPageSize } from '~/shared/util.page';
 import { PageType } from '~/enums/PageType.enum';
 import { TodoStatus } from '~/enums/TodoStatus.Type.enum';
 import { IoHomeOutline } from "react-icons/io5";
+import { IoMdArrowRoundUp } from "react-icons/io";
 import { RiCollapseDiagonalFill } from "react-icons/ri";
 import { winDragger } from '~/ui/App';
 import { TaskStatus } from '~/enums/TaskStatus.Type.enum';
 import TaskPlayer from '~/ui/components/TaskPlayer/TaskPlayer';
+import { addTaskCart, addTaskCartsInRange } from '~/ui/store/task/taskCartSlice';
 
 const Todoflow = () => {
   const navigate = useNavigate();
@@ -33,9 +36,14 @@ const Todoflow = () => {
   const { info, notify } = useAlert();
   const todoFlow = useAppSelector((state) => state.todoflow);
   const topBarDrager = useRef<(HTMLDivElement | null)>(null);
+  const containerTaskDiv = useRef<(HTMLDivElement | null)>(null);
   const [noteError, setNoteError] = useState<string>('');
   const [triggerTaskValidation, setTriggerTaskValidation] = useState<boolean>(false);
   const [isNewTodo, setIsNewTodo] = useState<boolean>(true);
+  const [isShouldScroll, setIsShouldScroll] = useState<boolean>(
+    todoFlow.tasks[todoFlow.currentTaskId || '']?.status !== TaskStatus.COMPLETED && 
+    todoFlow.tasks[todoFlow.currentTaskId || '']?.status !== TaskStatus.IN_PROGRESS
+  );
 
   useEffect(() =>{
     async function initDrag() {
@@ -97,8 +105,10 @@ const Todoflow = () => {
   useEffect(() => {
     const checkTimeEst = async () => {
       if (!todoFlow.currentTaskId || !todoFlow) return;
-      let currEstTime = todoFlow.tasks[todoFlow.currentTaskId]?.estimatedTime;
-      if (todoFlow.currentTaskId && todoFlow.timeLeft === currEstTime && currEstTime > 0) {
+      const currEstTime = todoFlow.tasks[todoFlow.currentTaskId]?.estimatedTime;
+      const timeLeft = todoFlow.timeLeft;
+      const currentTaskId = todoFlow.currentTaskId;
+      if (currentTaskId && timeLeft === currEstTime && currEstTime > 0 && todoFlow.tasks[currentTaskId].status === TaskStatus.IN_PROGRESS) {
         try {
           await notify('Deadline Approaching', 'You are getting close to the deadline. Please complete your task on time.');
         } catch (err) {
@@ -110,7 +120,20 @@ const Todoflow = () => {
     checkTimeEst();
   }, [todoFlow.timeLeft]);
 
-
+  useEffect(() => {
+    if (containerTaskDiv.current && isShouldScroll) {
+      containerTaskDiv.current.scrollTo({
+          top: containerTaskDiv.current.scrollHeight,
+          behavior: "smooth"
+        });
+    }
+    if (!isShouldScroll){
+      setTimeout(() => {
+        setIsShouldScroll(true);
+      }, 100);
+    }
+      
+  }, [todoFlow.taskIds.length]);
 
   const handleNoteChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
@@ -138,8 +161,9 @@ const Todoflow = () => {
     dispatch(addTask(newTask));
   }
 
-  const handleToStart = async () => {
+  const validationRules = () => {
     let valid = true;
+
     if (!todoFlow.note.trim()) {
       setNoteError('Note cannot be empty');
       valid = false;
@@ -147,17 +171,16 @@ const Todoflow = () => {
 
     if (todoFlow.taskIds.length === 0) {
       info('Please add at least one task before starting.');
-      return; 
+      return false;
     }
 
     setTriggerTaskValidation(true);
-    
     setTimeout(() => {
       setTriggerTaskValidation(false);
     }, 100);
 
-    const hasEmptyTasks = todoFlow.taskIds.some(taskIds => {
-      const task = todoFlow.tasks[taskIds];
+    const hasEmptyTasks = todoFlow.taskIds.some(taskId => {
+      const task = todoFlow.tasks[taskId];
       return !task || !task.title.trim();
     });
 
@@ -165,8 +188,8 @@ const Todoflow = () => {
       valid = false;
     }
 
-    const hasEmptySubtasks = todoFlow.taskIds.some(taskIds => {
-      const task = todoFlow.tasks[taskIds];
+    const hasEmptySubtasks = todoFlow.taskIds.some(taskId => {
+      const task = todoFlow.tasks[taskId];
       if (task) {
         return task.subTasks.some(subTask => !subTask.title.trim());
       }
@@ -178,7 +201,23 @@ const Todoflow = () => {
     }
 
     if (!valid) {
-      return; 
+      info('Please fix the errors in the tasks before starting.');
+        setTimeout(() => {
+        const firstErrorElement = document.querySelector('.input-error');
+        console.log(firstErrorElement);
+        if (firstErrorElement) {
+          firstErrorElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }, 150);
+    }
+
+    return valid; 
+  };
+
+  const handleToStart = async () => {
+    let isValid = validationRules();
+    if (!isValid) {
+      return;
     }
     dispatch(setTodoStatus(TodoStatus.START_ON_PROGRESS));
     handleTodoCreation();
@@ -192,7 +231,9 @@ const Todoflow = () => {
       for (const taskId of tasksArray) {
         const task = todoFlow.tasks[taskId];
         await window.electronAPI.taskUpsert(task);
+        dispatch(addTaskCart(task));
       }
+      
     } catch (error) {
       console.error('Failed to save todo:', error);
       info('Failed to save todo');
@@ -210,6 +251,7 @@ const Todoflow = () => {
       <div className="mb-2 flex items-center justify-between" ref={topBarDrager}>
         <div className='flex items-center'>
           <button className='btn btn-icon' onClick={() =>{
+            dispatch(setStopTimer());
             navigate('/dashboard');
           }}><IoHomeOutline /></button>
           <p className="text-sm text-gray-500">
@@ -219,18 +261,19 @@ const Todoflow = () => {
         {
           todoFlow.timer && (
             <button className="btn btn-icon" onClick={() => {
+              const isValid = validationRules();
+              if (!isValid) return;
               dispatch(setTodoStatus(TodoStatus.START_ON_PROGRESS));
             }}>
               <RiCollapseDiagonalFill />
             </button>
           )
         }
-
       </div>
       <div>
         <input 
           type="text" 
-          className={`input input-primary ${noteError ? 'border-red-500' : ''}`} 
+          className={`input input-primary ${noteError ? 'input-error' : ''}`} 
           placeholder="Note" 
           value={todoFlow.note}
           onChange={handleNoteChange}
@@ -259,13 +302,13 @@ const Todoflow = () => {
       {(todoFlow.currentTaskId && todoFlow.tasks[todoFlow.currentTaskId].status === TaskStatus.PAUSED) || todoFlow.currentTaskId === undefined ? 
         <div className='flex gap-2 mt-3'>
           <button 
-            className={`btn btn-primary flex-5 w-full h-[35px] text-xl ${todoFlow.status === 'Start' ? 'disabled' : ''}`} 
+            className={`btn btn-primary flex-5 w-full h-[35px] text-xxl ${todoFlow.status === 'Start' ? 'disabled' : ''}`} 
             onClick={handleToStart}
           >
             Start
           </button>
           <button className=
-            {`btn btn-secondary flex-1 w-full h-[35px] text-xl 
+            {`btn btn-secondary flex-1 w-full h-[35px] text-xxl 
               ${todoFlow.currentTaskId && todoFlow.tasks[todoFlow.currentTaskId].status === TaskStatus.PAUSED ? 
               '' : '!hidden'}`
             } onClick={handleClickBtnStop}>
@@ -273,17 +316,19 @@ const Todoflow = () => {
           </button>
         </div>        
         : 
-        <button className='btn btn-primary mt-3 w-full h-[35px] text-xl' onClick={handleClickBtnStop}>Stop</button>
+        <button className='btn btn-primary mt-3 w-full h-[35px] text-xxl' onClick={handleClickBtnStop}>Stop</button>
       }
 
       <button className="btn btn-secondary mt-3 w-full h-[30px] text-2xl flex items-center justify-center"
         onClick={handleAddNewTask}>
         <IoAddCircleOutline />
       </button>
-      <div className="overflow-y-auto" style={{ maxHeight: 'calc(100vh - 375px)' }}>
+      <div className="overflow-y-auto" style={{ maxHeight: 'calc(100vh - 375px)' }} ref={containerTaskDiv}>
         {todoFlow.currentTaskId && (
           <TaskPlayer 
-            task={todoFlow.tasks[todoFlow.currentTaskId]} 
+            task={todoFlow.tasks[todoFlow.currentTaskId]}
+            isTimer={todoFlow.timer === null}
+            isDoneTodo={todoFlow.taskCompleted === todoFlow.taskTotal} 
             onStartTask={() => {
               dispatch(setStartTimer(setInterval(() => {
                 dispatch(setTimeLeft(undefined));
@@ -293,7 +338,15 @@ const Todoflow = () => {
               dispatch(setStopTimer());
             }}
             onDoneTask={() => {
-              dispatch(setDoneCurrentTask());
+              if (todoFlow.currentTaskId) {
+                dispatch(setTaskStatus(TaskStatus.COMPLETED));
+                dispatch(setTodoStatus(TodoStatus.STOP));
+              }
+            }}
+            onDoneAndNextTask={() => {
+              const isValid = validationRules();
+              if (!isValid) return;
+              dispatch(setDoneAndNextTask());
             }}
             onChangeTask={(next: boolean, status: string) => {
               if (todoFlow && todoFlow.currentTaskId) {
@@ -310,10 +363,22 @@ const Todoflow = () => {
             }
           />
         )}
-        {todoFlow.taskIds.filter(id => id !== todoFlow.currentTaskId).map((taskIds, index) => (
+        {todoFlow.taskIds.filter(id => id !== todoFlow.currentTaskId && todoFlow.tasks[id].status !== TaskStatus.COMPLETED).map((taskIds, index) => (
           <Task key={taskIds} taskId={taskIds} index={todoFlow.currentTaskId ? index + 1 : index} triggerValidation={triggerTaskValidation} />
         ))}
       </div>
+      <button className='absolute bottom-4 left-4 btn btn-icon primary rounded-full text-4xl'
+        onClick={() =>{
+          if (containerTaskDiv.current) {
+            containerTaskDiv.current.scrollTo({
+              top: 0,
+              behavior: "smooth"
+            });
+          }
+        }}
+      >
+        <IoMdArrowRoundUp />
+      </button>
     </div>
   );
 };

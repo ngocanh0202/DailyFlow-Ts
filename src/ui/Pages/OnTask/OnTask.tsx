@@ -12,7 +12,7 @@ import { TbLayoutNavbarCollapseFilled } from "react-icons/tb";
 import { getPageSize } from '~/shared/util.page';
 import { useNavigate } from 'react-router-dom';
 import { useAppDispatch, useAppSelector } from '~/ui/store/hooks';
-import { setCurrentTaskId, setStartTimer, setTodoStatus, setStopTimer, setTimeLeft, updateTask, setTaskStatus, setDoneCurrentTask } from '~/ui/store/todo/todoSlice';
+import { setCurrentTaskId, setStartTimer, setTodoStatus, setStopTimer, setTimeLeft, updateTask, setTaskStatus, setChangeCurrentTask } from '~/ui/store/todo/todoSlice';
 import { IoChevronBack } from "react-icons/io5";
 import { TaskStatus } from '~/enums/TaskStatus.Type.enum';
 import { TodoStatus } from '~/enums/TodoStatus.Type.enum';
@@ -40,8 +40,11 @@ const OnTask = () => {
         return;
       }
       if (!todo.currentTaskId){
-        const firstTaskId = todo.taskIds[0];
-        dispatch(setCurrentTaskId(firstTaskId));
+        const incompleteTasks = todo.taskIds.filter(taskId => todo.tasks[taskId].status !== TaskStatus.COMPLETED);
+        if (incompleteTasks.length > 0) {
+          const firstTaskId = incompleteTasks[0];
+          dispatch(setCurrentTaskId(firstTaskId));
+        }
       }
       startTimer();
     }
@@ -57,24 +60,13 @@ const OnTask = () => {
       setShouldAnimate(textWidth > containerWidth);
     }
 
-    const handleToCheckChangeTask = () => {
-      if (todo.currentTaskId && todo.tasks[todo.currentTaskId].status === TaskStatus.COMPLETED) {
-        let isChanged = handleChangeTask(true, TaskStatus.COMPLETED);
-        if (!isChanged && todo) {
-            dispatch(setTodoStatus(TodoStatus.STOP));
-        }
-      }
-    }
-
-    handleToCheckChangeTask();
-
   }, [todo]);
 
   useEffect(() => {
     const checkTimeEst = async () => {
       if (!todo.currentTaskId || !todo) return;
       let currEstTime = todo.tasks[todo.currentTaskId]?.estimatedTime;
-      if (todo.currentTaskId && todo.timeLeft === currEstTime && currEstTime > 0) {
+      if (todo.currentTaskId && todo.timeLeft === currEstTime && currEstTime > 0 && todo.tasks[todo.currentTaskId].status === TaskStatus.IN_PROGRESS) {
         try {
           await notify('Deadline Approaching', 'You are getting close to the deadline. Please complete your task on time.');
         } catch (err) {
@@ -94,7 +86,7 @@ const OnTask = () => {
           await window.electronAPI.todoUpdate(todo.id, todo);
           if (todo.status === TodoStatus.STOP || todo.status === TodoStatus.START_ON_TODO) {
             handleToWinOnTop(false);
-            navigate(`/todoflow/${todo.id}`);
+            navigate(`/todoflow`);
           }
         } catch (err) {
           console.error('Failed to update todo:', err);
@@ -128,10 +120,7 @@ const OnTask = () => {
   };
 
   const pauseTimer = () => {
-    const currTaskStatus = todo.currentTaskId ? todo.tasks[todo.currentTaskId]?.status : null;
-    if (currTaskStatus === TaskStatus.IN_PROGRESS && todo.timer && todo.currentTaskId) {
-      dispatch(setStopTimer());
-    }
+    dispatch(setStopTimer());
   }
 
   const handleExpand = () => {
@@ -141,19 +130,9 @@ const OnTask = () => {
 
   const handleChangeTask = (isNext: boolean, _status: TaskStatus) => {
     if (todo && todo.currentTaskId) {
-      const currentIndex = todo.taskIds.indexOf(todo.currentTaskId);
-      const nextIndex = isNext ? currentIndex + 1 : currentIndex - 1;
-      if (nextIndex >= 0 && nextIndex < todo.taskIds.length) {
-        const nextTaskId = todo.taskIds[nextIndex];
-        dispatch(setTaskStatus(_status));
-        dispatch(setCurrentTaskId(nextTaskId));
-        startTimer();
-        return true;
-      }
-      else
-        return false;
+      dispatch(setChangeCurrentTask({isNext, status: _status}));
+      startTimer();
     }
-    return false;
   }
 
   const handleToCheckSubTask = (subTasks: SubTask, index: number) => {
@@ -167,7 +146,8 @@ const OnTask = () => {
 
   const handleDoneTask = () => {
     if (todo.currentTaskId) {
-      dispatch(setDoneCurrentTask());
+      dispatch(setTaskStatus(TaskStatus.COMPLETED));
+      dispatch(setTodoStatus(TodoStatus.STOP));
     }
   }
 
@@ -204,9 +184,9 @@ const OnTask = () => {
             !isTimeHovered ? 
               <span className='font-bold'>{todo.timeLeft != null ? formatTime(todo.timeLeft) : 'N/A'}</span> : 
               <div className='flex gap-1 justify-between items-center w-full'>
-                <button className='btn btn-primary h-[10px] w-[1px]' onClick={handleDoneTask}>Done!</button>
+                <button className='btn btn-primary h-[10px] w-[1px] text-sm' onClick={handleDoneTask}>Done!</button>
                 <BiSkipPrevious className='cursor-pointer animate-pop' onClick={() => {handleChangeTask(false, TaskStatus.PAUSED);}}/>
-                {todo.currentTaskId && todo.tasks[todo.currentTaskId]?.status === TaskStatus.PAUSED ? 
+                {!todo.timer ? 
                   <FaPlay
                     className='cursor-pointer animate-pop'
                     onClick={() => {
