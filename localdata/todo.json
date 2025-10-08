@@ -1,116 +1,37 @@
 {
   "items": [
     {
-      "id": "id-5as6v56nkc5",
-      "note": "Todo",
+      "id": "id-q05dgg2jrh9",
+      "note": "12312",
       "status": "Stop",
       "taskCompleted": 1,
       "taskTotal": 2,
       "estimatedTimeTodo": 0,
-      "actualTimeTodo": 1,
+      "actualTimeTodo": 0,
       "taskIds": [
-        "id-s2q4vvdyc2o",
-        "id-jmojnqlw7qf"
+        "id-xbg9nuv84jk",
+        "id-7y3pw1l6ikp"
       ],
       "tasks": {
-        "id-s2q4vvdyc2o": {
-          "id": "id-s2q4vvdyc2o",
-          "title": "Create Todo",
-          "estimatedTime": 0,
-          "actualTime": 1,
-          "subTasks": [],
-          "status": "Not Started"
-        },
-        "id-jmojnqlw7qf": {
-          "id": "id-jmojnqlw7qf",
-          "title": "ádasd",
-          "estimatedTime": 0,
-          "actualTime": 0,
-          "subTasks": [],
-          "status": "Not Started"
-        }
-      },
-      "timeLeft": 1,
-      "timer": 30,
-      "currentTaskId": "id-s2q4vvdyc2o"
-    },
-    {
-      "id": "id-llzxuooozyn",
-      "note": "đâssdasd",
-      "status": "Stop",
-      "taskCompleted": 0,
-      "taskTotal": 2,
-      "estimatedTimeTodo": 0,
-      "actualTimeTodo": 1,
-      "taskIds": [
-        "id-jjnz2o2h22",
-        "id-lkswzealpg"
-      ],
-      "tasks": {
-        "id-jjnz2o2h22": {
-          "id": "id-jjnz2o2h22",
-          "title": "ád",
-          "estimatedTime": 0,
-          "actualTime": 1,
-          "subTasks": [],
-          "status": "Not Started"
-        },
-        "id-lkswzealpg": {
-          "id": "id-lkswzealpg",
-          "title": "qewewq",
-          "estimatedTime": 0,
-          "actualTime": 0,
-          "subTasks": [],
-          "status": "Not Started"
-        }
-      },
-      "timeLeft": 1,
-      "timer": 22,
-      "currentTaskId": "id-jjnz2o2h22"
-    },
-    {
-      "id": "id-k5649s2xaf",
-      "note": "42141",
-      "status": "Stop",
-      "taskCompleted": 1,
-      "taskTotal": 3,
-      "estimatedTimeTodo": 6,
-      "actualTimeTodo": 2,
-      "taskIds": [
-        "id-t6wu0t24kj",
-        "id-wcwhatzcs7q",
-        "000-break-id-raxvezxih3p"
-      ],
-      "tasks": {
-        "id-t6wu0t24kj": {
-          "id": "id-t6wu0t24kj",
+        "id-xbg9nuv84jk": {
+          "id": "id-xbg9nuv84jk",
           "title": "12312",
           "estimatedTime": 0,
-          "actualTime": 2,
+          "actualTime": 0,
           "subTasks": [],
-          "status": "Not Started"
+          "status": "Completed"
         },
-        "id-wcwhatzcs7q": {
-          "id": "id-wcwhatzcs7q",
-          "title": "sdfdsdsf",
+        "id-7y3pw1l6ikp": {
+          "id": "id-7y3pw1l6ikp",
+          "title": "21412",
           "estimatedTime": 0,
           "actualTime": 0,
           "subTasks": [],
-          "status": "Not Started"
-        },
-        "000-break-id-raxvezxih3p": {
-          "id": "000-break-id-raxvezxih3p",
-          "title": "Take a break",
-          "estimatedTime": 6,
-          "actualTime": 0,
-          "subTasks": [],
-          "isTaskBreak": true,
           "status": "Not Started"
         }
       },
       "timeLeft": 0,
-      "timer": null,
-      "currentTaskId": "000-break-id-raxvezxih3p"
+      "timer": 16
     }
   ]
 }

@@ -1,8 +1,15 @@
 {
   "appId": "com.ngocanh.dailyflow",
-  "files": ["dist-electron", "dist-react"],
-  "extraResources": ["dist-electron/preload.cjs", "src/assets/**"],
-  "icon": "./desktopIcon.png",
+  "productName": "Dailyflow",
+  "files": [
+    "dist-electron",
+    "dist",
+    "src/assets"
+  ],
+  "icon": "build/icon",
+  "directories": {
+    "output": "release"
+  },
   "mac": {
     "target": "dmg"
   },
@@ -11,6 +18,6 @@
     "category": "Utility"
   },
   "win": {
-    "target": ["portable", "msi"]
+    "target": ["nsis", "portable"]
   }
 }

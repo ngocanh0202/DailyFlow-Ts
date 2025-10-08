@@ -125,12 +125,11 @@ const Todoflow = () => {
           }else{
             message = { title: 'Deadline Approaching', body: 'You are getting close to the deadline. Please complete your task on time.' };
           }
-          
+          dispatch(setStopTimer());
           await notify(message.title, message.body);
         } catch (err) {
           console.error('Failed to show notification:', err);
         }
-        dispatch(setStopTimer());
       }
     };
 

@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
+import { useAlert } from '~/ui/helpers/hooks/useAlert';
 import { useAppDispatch } from '~/ui/store/hooks';
 import { removeAllCartTasks } from '~/ui/store/task/taskCartSlice';
 
 const Settings = () => {
   const dispatch = useAppDispatch();
+    const { success } = useAlert(); 
   const [startWithWindows, setStartWithWindows] = useState(false);
   const [breakTime, setBreakTime] = useState(300);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -22,7 +24,6 @@ const Settings = () => {
       try {
         if (window.electronAPI && window.electronAPI.getSettings) {
           const settings = await window.electronAPI.getSettings();
-          console.log(settings);
           setStartWithWindows(settings.startWithWindows ?? false);
           setBreakTime(settings.breakTime ?? 300);
         } else {
@@ -38,8 +39,6 @@ const Settings = () => {
     loadSettings();
   }, []);
 
-  // NOTE: do NOT auto-save on every change. User must click Save.
-
   const handleSaveSettings = async () => {
     try {
       const settings: AppSettings = {
@@ -53,6 +52,7 @@ const Settings = () => {
       
       localStorage.setItem('startWithWindows', String(settings.startWithWindows));
       localStorage.setItem('breakTime', String(settings.breakTime));
+      await success('Settings saved successfully!');
 
     } catch (error) {
       console.error('Error saving settings:', error);
@@ -72,7 +72,6 @@ const Settings = () => {
       setBreakTime(300);
       setShowDeleteModal(false);
       dispatch(removeAllCartTasks());
-      console.log('All data deleted');
     } catch (error) {
       console.error('Error deleting data:', error);
     }

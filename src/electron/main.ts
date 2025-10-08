@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, screen, dialog, Notification } from 'electron';
+import { app, BrowserWindow, ipcMain, screen, dialog, Notification, nativeImage } from 'electron';
 import { getAssetPath, getIconPath, getPreloadPath, getUIPath } from '../pathResolver.js';
 import { isDev} from '../shared/util.js';
 import { taskStore, todoStore, windowConfig } from '../shared/util.jsondata.js';
@@ -29,8 +29,6 @@ async function loadWindowConfigs() {
 const createWindow = (windowType = 'main') => {
   let config;
   const windowConfig = windowConfigs.items?.find((item: any) => item.type === windowType);
-
-  console.log(windowConfig);
 
   if (windowConfig) {
     config = {
@@ -238,7 +236,6 @@ let store = new Store({ name: 'settings' });
 ipcMain.handle('get-settings', async () => {
   try {
     const settings = store.get('settings');
-    console.log("get setting", settings);
     return settings || { startWithWindows: false, breakTime: 300 };
   } catch (err) {
     console.error('get-settings error:', err);
@@ -248,7 +245,6 @@ ipcMain.handle('get-settings', async () => {
 
 ipcMain.handle('save-settings', async (event, settings) => {
   try {
-    console.log(settings);
     store.set('settings', settings);
     if (settings.startWithWindows) {
       if (process.platform === 'win32') {
@@ -386,11 +382,9 @@ ipcMain.handle('system-alert', async (event, options) => {
   }
 });
 
-const activeNotifications = new Set<string>();
 ipcMain.handle('system-notification', async (event, options) => {
   const { title, body, icon } = options;
-  const iconPath = icon ? getIconPath(icon) : getIconPath("trayIcon.png");
-  const key = `${title}::${body}`;
+  const iconPath = icon ? getIconPath(icon) : getIconPath("windowIcon.png");
 
   try {
     if (!Notification.isSupported()) {
@@ -398,24 +392,17 @@ ipcMain.handle('system-notification', async (event, options) => {
       return false;
     }
 
-    if (activeNotifications.has(key)) {
-      return false;
-    }
-
-    const notification = new Notification({
+    const notificationOptions: any = {
       title,
       body,
-      icon: iconPath,
+      icon: nativeImage.createFromPath(iconPath),
       silent: false,
-      timeoutType: 'never',
-    });
-
-    activeNotifications.add(key);
-
-    const cleanup = () => {
-      activeNotifications.delete(key);
-      try { notification.close?.(); } catch {};
+      timeoutType: 'default',
     };
+
+    const notification = new Notification(notificationOptions);
+    
+    notification.show();
 
     notification.on('click', () => {
       const mainWin = windows.get('main')?.window;
@@ -430,17 +417,11 @@ ipcMain.handle('system-notification', async (event, options) => {
         mainWin.show();
         mainWin.focus();
       }
-      cleanup();
     });
 
-    notification.on('close', cleanup);
-    notification.on('reply', cleanup);
-
-    notification.show();
     return true;
   } catch (error) {
     console.error('Notification error:', error);
-    activeNotifications.delete(key);
     return false;
   }
 });

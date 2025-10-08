@@ -119,12 +119,14 @@ const TaskPlayer = ({
               />    
             )}
             
-            {isPaused ? (
+            {isPaused && !task.isTaskBreak && (
               <FaPlay
                 className="cursor-pointer animate-pop"
                 onClick={onStartTask}
               />
-            ) : (
+            )}
+
+            {!isPaused && !task.isTaskBreak && (
               <FaPause 
                 className="cursor-pointer animate-pop" 
                 onClick={onPauseTask} 

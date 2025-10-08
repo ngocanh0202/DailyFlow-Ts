@@ -79,12 +79,11 @@ const OnTask = () => {
           const message = isTaskBreak
             ? { title: 'Break Time Over', body: 'Your break time is over. Time to get back to work!' }
             : { title: 'Deadline Approaching', body: 'You are getting close to the deadline. Please complete your task on time.' };
-          
+          dispatch(setStopTimer());
           await notify(message.title, message.body);
         } catch (err) {
           console.error('Failed to show notification:', err);
         }
-        dispatch(setStopTimer());
       }
     };
     checkTimeEst();
@@ -167,6 +166,8 @@ const OnTask = () => {
   }
 
   const canChangeTask = todo.currentTaskId && todo.tasks[todo.currentTaskId]?.isTaskBreak;
+  const isCurrentTaskBreak = todo.currentTaskId && todo.tasks[todo.currentTaskId]?.isTaskBreak;
+  const isPaused = todo.timer;
 
 
   return (
@@ -202,8 +203,12 @@ const OnTask = () => {
                 {canChangeTask ? null : (
                   <BiSkipPrevious className='cursor-pointer animate-pop' onClick={() => {handleChangeTask(false, TaskStatus.PAUSED);}}/>
                 )}          
+
+                {isPaused && !isCurrentTaskBreak && (
+                  <FaPause className='cursor-pointer animate-pop' onClick={() => {pauseTimer();}}/> 
+                )}
                 
-                {!todo.timer ? 
+                {!isPaused && !isCurrentTaskBreak && (
                   <FaPlay
                     className='cursor-pointer animate-pop'
                     onClick={() => {
@@ -212,9 +217,8 @@ const OnTask = () => {
                       }
                     }}
                   />
-                  :
-                  <FaPause className='cursor-pointer animate-pop' onClick={() => {pauseTimer();}}/> 
-                }
+                )}
+                
                 {canChangeTask ? null : (
                   <MdSkipNext className='cursor-pointer animate-pop' onClick={() => {handleChangeTask(true, TaskStatus.PAUSED);}}/>
                 )}

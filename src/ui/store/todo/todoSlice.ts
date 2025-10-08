@@ -53,7 +53,7 @@ const todoflowSlice = createSlice({
 
     addAndSetTaskBreak: (state) => {
       const newId = PrefixType.BREAK_PREFIX + generateId();
-      const breakTime = 5;
+      const breakTime = localStorage.getItem('breakTime') ? parseInt(localStorage.getItem('breakTime') as string) : 300;
       const breakTask = {
         id: newId,
         title: 'Take a break',
@@ -172,7 +172,7 @@ const todoflowSlice = createSlice({
       if (!task) return;
 
       if (action.payload === undefined) {
-        const timeLeft = state.timeLeft ?? (task.isTaskBreak ? 1 : 0);
+        const timeLeft = state.timeLeft ?? (task.isTaskBreak ? 0 : 0);
         state.timeLeft = Math.max(0, task.isTaskBreak ? timeLeft - 1 : timeLeft + 1);
       } else {
         state.timeLeft = action.payload;
