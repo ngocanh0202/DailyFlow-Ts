@@ -105,25 +105,32 @@ function App() {
   };
 
   useEffect(() => {
-    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      e.preventDefault();
-      return '';
-    };
-    window.addEventListener('beforeunload', handleBeforeUnload);
-
     const handleResetTodo = async () =>{
       try{
         await window.electronAPI.todoReset();
       }catch(err){
-        console.error('Failed to reset todo on app close:', err);
+        console.error('Failed to reset todo on app start:', err);
+      }
+    }
+
+    const handleLoadSettings = async () =>{
+      try{
+        const settings = await window.electronAPI.getSettings();
+        if(settings){
+          if(settings.startWithWindows !== undefined){
+            localStorage.setItem('startWithWindows', String(settings.startWithWindows));
+          }
+          if(settings.breakTime !== undefined){
+            localStorage.setItem('breakTime', String(settings.breakTime));
+          }
+        }
+      }catch(err){
+        console.error('Failed to load settings on app start:', err);
       }
     }
 
     handleResetTodo();
-
-    return () => {
-      window.removeEventListener('beforeunload', handleBeforeUnload);
-    };
+    handleLoadSettings();
   }, []);
 
   return (

@@ -62,7 +62,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
         body: string;
         icon?: string;
     }) => ipcRenderer.invoke('system-notification', options),
-    // Set app as startup
-    setAutoLaunch: (enable: boolean) => ipcRenderer.invoke('set-auto-launch', enable),
-    getAutoLaunch: () => ipcRenderer.invoke('get-auto-launch'),
+    // App settings
+    getSettings: () => ipcRenderer.invoke('get-settings'),
+    saveSettings: (settings: any) => ipcRenderer.invoke('save-settings', settings),
+    deleteAllData: () => ipcRenderer.invoke('delete-all-data'),
 } satisfies Window['electronAPI']);

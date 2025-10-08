@@ -49,9 +49,10 @@ interface Window {
         body: string;
         icon?: string;
     }) => Promise<boolean>;
-    // Set app as startup
-    setAutoLaunch: (enable: boolean) => Promise<void>;
-    getAutoLaunch: () => Promise<boolean>;
+    // App settings
+    getSettings: () => Promise<AppSettings>;
+    saveSettings: (settings: AppSettings) => Promise<void>;
+    deleteAllData: () => Promise<void>;
   };
 }
 
@@ -84,4 +85,9 @@ interface HTMLDivElementWithPageType  {
 
 interface HTMLDivElementWithPageTypeArray {
   elements: HTMLDivElementWithPageType[];
+}
+
+interface AppSettings {
+  startWithWindows: boolean;
+  breakTime: number; 
 }

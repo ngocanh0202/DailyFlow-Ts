@@ -50,6 +50,11 @@ const taskCartSlice = createSlice({
           state.taskIds.push(taskId);
         }
       }
+    },
+    removeAllCartTasks: (state) => {
+      state.taskIds = [];
+      state.taskIdsInCart = [];
+      state.tasks = {};
     }
 
   }
@@ -60,7 +65,8 @@ export const {
   removeTaskCart,
   addTaskCartsInRange,
   addTaskInCart,
-  removeTaskInCart
+  removeTaskInCart,
+  removeAllCartTasks
 } = taskCartSlice.actions;
 
 export default taskCartSlice.reducer;

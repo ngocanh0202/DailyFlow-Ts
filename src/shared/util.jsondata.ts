@@ -3,6 +3,7 @@ import fs from 'fs';
 import fsp from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { getPathLocalData } from '../pathResolver.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -134,15 +135,15 @@ class JsonStore {
 }
 
 export const taskStore = new JsonStore({
-  filePath: path.resolve(__dirname, '../localdata/task.json')
+  filePath: path.resolve(__dirname,  getPathLocalData('task.json'))
 });
 
 export const todoStore = new JsonStore({
-  filePath: path.resolve(__dirname, '../localdata/todo.json')
+  filePath: path.resolve(__dirname, getPathLocalData('todo.json'))
 });
 
 export const windowConfig = new JsonStore({
-  filePath: path.resolve(__dirname, '../localdata/windowConfig.json')
+  filePath: path.resolve(__dirname, getPathLocalData('windowConfig.json'))
 });
 
 export {

@@ -1,6 +1,6 @@
 import path from 'path';
 import { app } from 'electron';
-import { isDev } from '../shared/util.js';
+import { isDev } from './shared/util.js';
 
 export function getPreloadPath(): string {
   return path.join(
@@ -15,7 +15,15 @@ export function getUIPath(): string {
 }
 
 export function getAssetPath(): string {
-  return path.join(app.getAppPath(), isDev() ? '.' : '..', '/src/assets');
+  if (isDev()) {
+    return path.join(app.getAppPath(), 'src/assets');
+  } else {
+    return path.join(process.resourcesPath, 'src/assets');
+  }
+}
+
+export function getPathLocalData(nameFile: string): string {
+  return path.join(app.getAppPath(), 'localdata/', nameFile);
 }
 
 export function getIconPath(iconName: string): string {

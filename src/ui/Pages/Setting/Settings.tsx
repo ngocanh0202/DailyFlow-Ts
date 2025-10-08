@@ -1,10 +1,13 @@
 import React, { useState, useEffect } from 'react';
+import { useAppDispatch } from '~/ui/store/hooks';
+import { removeAllCartTasks } from '~/ui/store/task/taskCartSlice';
 
 const Settings = () => {
+  const dispatch = useAppDispatch();
   const [startWithWindows, setStartWithWindows] = useState(false);
-  const [breakTime, setBreakTime] = useState(300); // Default 5 minutes in seconds
-  const [isSaving, setIsSaving] = useState(false);
+  const [breakTime, setBreakTime] = useState(300);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   const breakTimeOptions = [
     { label: '5 Minutes', value: 300 },
@@ -15,65 +18,61 @@ const Settings = () => {
   ];
 
   useEffect(() => {
-    const handleToResize = async () => {
+    const loadSettings = async () => {
       try {
-        // Load saved settings
-        const savedStartWithWindows = localStorage.getItem('startWithWindows');
-        const savedBreakTime = localStorage.getItem('breakTime');
-        
-        if (savedStartWithWindows !== null) {
-          setStartWithWindows(savedStartWithWindows === 'true');
-        }
-        if (savedBreakTime !== null) {
-          setBreakTime(parseInt(savedBreakTime));
+        if (window.electronAPI && window.electronAPI.getSettings) {
+          const settings = await window.electronAPI.getSettings();
+          console.log(settings);
+          setStartWithWindows(settings.startWithWindows ?? false);
+          setBreakTime(settings.breakTime ?? 300);
+        } else {
+          const savedStartWithWindows = localStorage.getItem('startWithWindows');
+          const savedBreakTime = localStorage.getItem('breakTime');
+          if (savedStartWithWindows !== null) setStartWithWindows(savedStartWithWindows === 'true');
+          if (savedBreakTime !== null) setBreakTime(parseInt(savedBreakTime));
         }
       } catch (error) {
         console.error('Error loading settings:', error);
       }
     };
-    handleToResize();
+    loadSettings();
   }, []);
 
+  // NOTE: do NOT auto-save on every change. User must click Save.
+
   const handleSaveSettings = async () => {
-    setIsSaving(true);
     try {
-      // Save to memory state
-      const settings = {
+      const settings: AppSettings = {
         startWithWindows,
         breakTime
       };
-      
-      // Simulate save delay
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
-      console.log('Settings saved:', settings);
-      
-      // Show success feedback
-      const saveBtn = document.querySelector('.save-btn');
-      if (saveBtn) {
-        saveBtn.textContent = '✓ Saved!';
-        setTimeout(() => {
-          saveBtn.textContent = 'Save Settings';
-        }, 2000);
+
+      if (window.electronAPI && window.electronAPI.saveSettings) {
+        await window.electronAPI.saveSettings(settings);
       }
+      
+      localStorage.setItem('startWithWindows', String(settings.startWithWindows));
+      localStorage.setItem('breakTime', String(settings.breakTime));
+
     } catch (error) {
       console.error('Error saving settings:', error);
-    } finally {
-      setIsSaving(false);
     }
   };
 
   const handleDeleteData = async () => {
     try {
-      // Clear all data
+      if (window.electronAPI && window.electronAPI.deleteAllData) {
+        await window.electronAPI.deleteAllData();
+      } else {
+        localStorage.removeItem('startWithWindows');
+        localStorage.removeItem('breakTime');
+      }
+
       setStartWithWindows(false);
       setBreakTime(300);
-      
-      // Simulate delete delay
-      await new Promise(resolve => setTimeout(resolve, 300));
-      
-      console.log('All data deleted');
       setShowDeleteModal(false);
+      dispatch(removeAllCartTasks());
+      console.log('All data deleted');
     } catch (error) {
       console.error('Error deleting data:', error);
     }
@@ -138,7 +137,11 @@ const Settings = () => {
 
           <div className="pt-4">
             <button
-              onClick={handleSaveSettings}
+              onClick={async () => {
+                setIsSaving(true);
+                await handleSaveSettings();
+                setIsSaving(false);
+              }}
               disabled={isSaving}
               className="btn-primary w-full py-3 text-lg save-btn"
             >

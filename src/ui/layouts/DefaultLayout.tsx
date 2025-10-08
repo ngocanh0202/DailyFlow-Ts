@@ -12,7 +12,7 @@ import './DefaultLayout.css';
 import { PageType } from '~/enums/PageType.enum';
 import { useAppDispatch } from '../store/hooks';
 import { initializeTodoFlow } from '../store/todo/todoSlice';
-import TaskCart from '../components/TaskCart/taskCart';
+import TaskCart from '../components/TaskCart/TaskCart';
 
 interface DefaultLayoutProps {
   children: ReactNode;

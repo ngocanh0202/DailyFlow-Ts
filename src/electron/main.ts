@@ -1,9 +1,9 @@
 import { app, BrowserWindow, ipcMain, screen, dialog, Notification } from 'electron';
-import { getAssetPath, getIconPath, getPreloadPath, getUIPath } from './pathResolver.js';
+import { getAssetPath, getIconPath, getPreloadPath, getUIPath } from '../pathResolver.js';
 import { isDev} from '../shared/util.js';
 import { taskStore, todoStore, windowConfig } from '../shared/util.jsondata.js';
 import { GetCurrentPosition, handleDragWindow, smoothResizeAndMove, stopDragWindow } from '../shared/util.window.js';
-import { PageType } from '../enums/PageType.enum.js';
+import Store from 'electron-store';
 
 const windows = new Map();
 
@@ -29,6 +29,8 @@ async function loadWindowConfigs() {
 const createWindow = (windowType = 'main') => {
   let config;
   const windowConfig = windowConfigs.items?.find((item: any) => item.type === windowType);
+
+  console.log(windowConfig);
 
   if (windowConfig) {
     config = {
@@ -231,6 +233,73 @@ ipcMain.handle('get-user-screen-size', async () => {
   return { width, height };
 });
 
+// App settings using electron-store
+let store = new Store({ name: 'settings' });
+ipcMain.handle('get-settings', async () => {
+  try {
+    const settings = store.get('settings');
+    console.log("get setting", settings);
+    return settings || { startWithWindows: false, breakTime: 300 };
+  } catch (err) {
+    console.error('get-settings error:', err);
+    return { startWithWindows: false, breakTime: 300 };
+  }
+});
+
+ipcMain.handle('save-settings', async (event, settings) => {
+  try {
+    console.log(settings);
+    store.set('settings', settings);
+    if (settings.startWithWindows) {
+      if (process.platform === 'win32') {
+        app.setLoginItemSettings({
+          openAtLogin: true,
+          path: app.getPath('exe'),
+          args: []
+        });
+      } else if (process.platform === 'darwin') {
+        app.setLoginItemSettings({
+          openAtLogin: true,
+          openAsHidden: true,
+          path: process.execPath,
+          args: []
+        });
+      }
+    } else {
+      if (process.platform === 'win32') {
+        app.setLoginItemSettings({
+          openAtLogin: false
+        });
+      } else if (process.platform === 'darwin') {
+        app.setLoginItemSettings({
+          openAtLogin: false,
+          openAsHidden: false
+        });
+      }
+    }
+
+    return true;
+  } catch (err) {
+    console.error('save-settings error:', err);
+    return false;
+  }
+});
+
+ipcMain.handle('delete-all-data', async () => {
+  try {
+    store.set('settings', {
+      startWithWindows: false,
+      breakTime: 300
+    });
+    await taskStore.clear();
+    await todoStore.clear();
+    return true;
+  } catch (err) {
+    console.error('delete-all-data error:', err);
+    return false;
+  }
+});
+
 ipcMain.handle(
   "smooth-resize-and-move",
   async (
@@ -317,13 +386,19 @@ ipcMain.handle('system-alert', async (event, options) => {
   }
 });
 
+const activeNotifications = new Set<string>();
 ipcMain.handle('system-notification', async (event, options) => {
   const { title, body, icon } = options;
   const iconPath = icon ? getIconPath(icon) : getIconPath("trayIcon.png");
-  
+  const key = `${title}::${body}`;
+
   try {
     if (!Notification.isSupported()) {
       console.error('Notifications are not supported on this system');
+      return false;
+    }
+
+    if (activeNotifications.has(key)) {
       return false;
     }
 
@@ -331,8 +406,16 @@ ipcMain.handle('system-notification', async (event, options) => {
       title,
       body,
       icon: iconPath,
-      silent: false
+      silent: false,
+      timeoutType: 'never',
     });
+
+    activeNotifications.add(key);
+
+    const cleanup = () => {
+      activeNotifications.delete(key);
+      try { notification.close?.(); } catch {};
+    };
 
     notification.on('click', () => {
       const mainWin = windows.get('main')?.window;
@@ -347,61 +430,24 @@ ipcMain.handle('system-notification', async (event, options) => {
         mainWin.show();
         mainWin.focus();
       }
+      cleanup();
     });
+
+    notification.on('close', cleanup);
+    notification.on('reply', cleanup);
 
     notification.show();
     return true;
   } catch (error) {
     console.error('Notification error:', error);
-    return false;
-  }
-});
-// Set app as startup
-ipcMain.handle('set-auto-launch', async (event, enable: boolean) => {
-  const platform = process.platform;
-
-  try {
-    if (platform === 'darwin') {
-      app.setLoginItemSettings({
-        openAtLogin: enable,
-        openAsHidden: enable,
-        path: process.execPath,
-        args: []
-      });
-      return true;
-    } else if (platform === 'win32') {
-      app.setLoginItemSettings({
-        openAtLogin: enable,
-        path: app.getPath('exe'),
-        args: [] 
-      });
-      return true;
-    } else {
-      return false;
-    }
-  } catch (err) {
-    console.error('set-auto-launch error:', err);
-    return false;
-  }
-});
-
-ipcMain.handle('get-auto-launch', async () => {
-  try {
-    const settings = app.getLoginItemSettings();
-    return Boolean(
-      settings.openAtLogin ||
-      (settings as any).openAsHidden ||
-      (settings as any).enabled ||
-      (settings as any).wasOpenedAtLogin
-    );
-  } catch (err) {
-    console.error('get-auto-launch error:', err);
+    activeNotifications.delete(key);
     return false;
   }
 });
 
 app.on('ready', async () => {
   app.setAppUserModelId('Dailyflow');
+  app.setName('Dailyflow'); 
   await loadWindowConfigs();
   createWindow('main');
   app.on('activate', () => {

@@ -17,6 +17,7 @@ import {
   setChangeCurrentTask,
   setTaskStatus,
   setResetTodoFlow,
+  addAndSetTaskBreak,
 } from "~/ui/store/todo/todoSlice";
 import { useAlert } from "~/ui/helpers/hooks/useAlert";
 import { getPageSize } from '~/shared/util.page';
@@ -270,6 +271,7 @@ const Todoflow = () => {
         <div className='flex items-center w-full'>
           <button className='btn btn-icon' onClick={() =>{
             dispatch(setStopTimer());
+            window.electronAPI.setWindowAlwaysOnTop('main', false);
             navigate('/dashboard');
           }}><IoHomeOutline /></button>
           <div className="text-sm text-gray-500 flex items-center gap-1 flex-1">
@@ -308,15 +310,15 @@ const Todoflow = () => {
       </div>
   
       <div className="card mt-3">
-        <div className='flex items-center justify-between'>
+        <div className='flex items-center justify-between !font-bold'>
           <div>
             <span>Status: </span> <span className="text-highlight">{todoFlow.status == TodoStatus.STOP ? 'Stop' : 'Start'}</span>
           </div>
           <div>
-            <span>Est: </span> <span className={todoFlow.actualTimeTodo > todoFlow.estimatedTimeTodo ? 'text-red-500' : ''}>{formatTime(todoFlow.actualTimeTodo)} / {formatTime(todoFlow.estimatedTimeTodo)}</span>
+            <span>Est: </span> <span className={todoFlow.actualTimeTodo > todoFlow.estimatedTimeTodo ? 'text-orange-500' : ''}>{formatTime(todoFlow.actualTimeTodo)} / {formatTime(todoFlow.estimatedTimeTodo)}</span>
           </div>
         </div>
-        <div className='flex items-center gap-2'>
+        <div className='flex items-center gap-2 !font-bold'>
           <div className="progress progress-xl">
               <div className="progress-bar" style={{ width: calculateProgressWidth(todoFlow.taskCompleted, todoFlow.taskTotal) }}></div>
           </div>
@@ -347,17 +349,8 @@ const Todoflow = () => {
             isDoneTodo={todoFlow.taskCompleted === todoFlow.taskTotal} 
             onTakeBreak={() => {
               const newId = PrefixType.BREAK_PREFIX + generateId();
-              dispatch(addTask({
-                id: newId,
-                title: 'Take a break',
-                estimatedTime: 6,
-                actualTime: 5,
-                subTasks: [],
-                isTaskBreak: true,
-                status: 'Not Started'
-              }));
+              dispatch(addAndSetTaskBreak());
               setIsShouldScroll(false);
-              dispatch(setCurrentTaskId(newId));
               dispatch(setStartTimer(setInterval(() => {
                 dispatch(setTimeLeft(undefined));
               }, 1000)));

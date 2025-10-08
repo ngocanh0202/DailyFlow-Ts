@@ -1,7 +1,9 @@
 import { createSlice, PayloadAction  } from '@reduxjs/toolkit';
+import { stat } from 'fs';
 import { PrefixType } from '~/enums/Prefix.Type.enum';
 import { TaskStatus } from '~/enums/TaskStatus.Type.enum';
 import { TodoStatus } from '~/enums/TodoStatus.Type.enum';
+import { generateId } from '~/ui/helpers/utils/utils';
 
 const initialState: TodoFlow = {
   id: '',
@@ -47,6 +49,26 @@ const todoflowSlice = createSlice({
       state.taskIds.push(task.id);
       state.taskTotal += 1;
       todoflowSlice.caseReducers.calculateEstimatedTime(state);
+    },
+
+    addAndSetTaskBreak: (state) => {
+      const newId = PrefixType.BREAK_PREFIX + generateId();
+      const breakTime = 5;
+      const breakTask = {
+        id: newId,
+        title: 'Take a break',
+        estimatedTime: breakTime + 1,
+        actualTime: breakTime,
+        subTasks: [],
+        isTaskBreak: true,
+        status: 'Not Started'
+      }
+      state.tasks[newId] = breakTask;
+      state.taskIds.push(newId);
+      state.taskTotal += 1;
+      todoflowSlice.caseReducers.calculateEstimatedTime(state);
+      state.currentTaskId = newId;
+      state.timeLeft = breakTime;
     },
     
     removeTask: (state, action: PayloadAction<string>) => {
@@ -229,21 +251,33 @@ const todoflowSlice = createSlice({
       }
     },
 
-    setResetTodoFlow: (state) => {
-      state.taskCompleted = 0;
-      state.status = TodoStatus.STOP;
-      state.currentTaskId = undefined;
-      state.timeLeft = 0;
-      state.taskIds.forEach(taskId => {
-        state.tasks[taskId].status = TaskStatus.NOT_STARTED;
-        state.tasks[taskId].actualTime = 0;
-      });
-      if (state.timer) {
-        clearInterval(state.timer);
-        state.timer = null;
+      setResetTodoFlow: (state) => {
+        state.taskCompleted = 0;
+        state.status = TodoStatus.STOP;
+        state.currentTaskId = undefined;
+        state.timeLeft = 0;
+
+        if (state.timer) {
+          clearInterval(state.timer);
+          state.timer = null;
+        }
+
+        const nonBreakTaskIds = state.taskIds.filter(id => !id.includes(PrefixType.BREAK_PREFIX));
+        const newTasks: Record<string, Task> = {};
+        nonBreakTaskIds.forEach(id => {
+          const t = state.tasks[id];
+          if (t) {
+            newTasks[id] = { ...t, status: TaskStatus.NOT_STARTED, actualTime: 0 };
+          }
+        });
+
+        state.tasks = newTasks;
+        state.taskIds = nonBreakTaskIds;
+        state.taskTotal = state.taskIds.length;
+
+        todoflowSlice.caseReducers.calculateEstimatedTime(state);
       }
-      todoflowSlice.caseReducers.calculateEstimatedTime(state);
-    }
+
   },
 });
 
@@ -251,6 +285,7 @@ export const {
   initializeTodoFlow,
   setTodo,
   addTask,
+  addAndSetTaskBreak,
   removeTask,
   updateTask,
   reorderTasks,

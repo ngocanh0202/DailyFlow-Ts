@@ -66,15 +66,14 @@ const TaskPlayer = ({
         />
         <p className='font-bold'>{task.title}</p>
         <div className='flex flex-col gap-2 items-center'>
-  
+          <button className="btn btn-primary !p-2" onClick={onDoneAndNextTask}>
+            {isDoneTodo ? 'All Done!' : 'Next Task'}
+          </button>
           {!isDoneTodo && 
           <button className='btn btn-secondary !p-1' onClick={onTakeBreak}>
             <LuGamepad2 className='mr-2' />
             Take Break!
           </button>}
-          <button className="btn btn-primary !p-2" onClick={onDoneAndNextTask}>
-            {isDoneTodo ? 'All Done!' : 'Next Task'}
-          </button>
         </div>
 
       </div>

@@ -15,6 +15,9 @@ export default defineConfig({
   server: {
     port: 5123,
     strictPort: true,
+    watch: {
+      ignored: ['**/localdata/**']
+    }
   },
   resolve: {
     alias: {

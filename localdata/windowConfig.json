@@ -1,0 +1,12 @@
+{
+    "items" : [
+        {
+            "type": "main",
+            "resizable": false,
+            "width": 1100,
+            "height": 750,
+            "alwaysOnTop": false,
+            "frame": false
+        }
+    ]
+}

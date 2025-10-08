@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { addTaskCartsInRange, addTaskInCart, removeTaskInCart } from "~/ui/store/task/taskCartSlice";
 import { addTask } from "~/ui/store/todo/todoSlice";
 import { generateId } from "~/ui/helpers/utils/utils";
+import { TaskStatus } from "~/enums/TaskStatus.Type.enum";
 
 interface TaskCartProps {
   className?: string;
@@ -26,7 +27,7 @@ const TaskCart = ({ className }: TaskCartProps) => {
 
   const handleAddTaskToTodoFlow = (taskId: string) => {
     if (window.location.pathname === '/todoflow') {
-      const newTask = {...tasks.tasks[taskId], id: generateId()};
+      const newTask = {...tasks.tasks[taskId], id: generateId(), status: TaskStatus.NOT_STARTED};
       dispatch(addTask(newTask));
     }
   }
