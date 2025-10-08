@@ -3,10 +3,11 @@
   "productName": "Dailyflow",
   "files": [
     "dist-electron",
-    "dist",
-    "src/assets"
+    "dist-react",
+    "src/assets",
+    "localdata"
   ],
-  "icon": "build/icon",
+  "icon": "./desktopIcon.jpg",
   "directories": {
     "output": "release"
   },

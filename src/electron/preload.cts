@@ -66,4 +66,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getSettings: () => ipcRenderer.invoke('get-settings'),
     saveSettings: (settings: any) => ipcRenderer.invoke('save-settings', settings),
     deleteAllData: () => ipcRenderer.invoke('delete-all-data'),
+    // App close
+    appClose: () => ipcRenderer.invoke('app-close'),
+    appMinimize: () => ipcRenderer.invoke('app-minimize'),
 } satisfies Window['electronAPI']);

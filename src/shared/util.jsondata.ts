@@ -34,10 +34,8 @@ async function readJsonFileSafely<T = any>(filePath: string, fallback: T): Promi
 
 async function writeJsonFileAtomically(filePath: string, data: any): Promise<void> {
   ensureDirectoryExists(filePath);
-  // const tempFilePath = `${filePath}.tmp`;
   const json = JSON.stringify(data, null, 2);
   await fsp.writeFile(filePath, json, 'utf8');
-  // await fsp.rename(tempFilePath, filePath);
 }
 
 function generateId(): string {
@@ -135,15 +133,15 @@ class JsonStore {
 }
 
 export const taskStore = new JsonStore({
-  filePath: path.resolve(__dirname,  getPathLocalData('task.json'))
+  filePath: getPathLocalData('task.json')
 });
 
 export const todoStore = new JsonStore({
-  filePath: path.resolve(__dirname, getPathLocalData('todo.json'))
+  filePath: getPathLocalData('todo.json')
 });
 
 export const windowConfig = new JsonStore({
-  filePath: path.resolve(__dirname, getPathLocalData('windowConfig.json'))
+  filePath: getPathLocalData('windowConfig.json')
 });
 
 export {

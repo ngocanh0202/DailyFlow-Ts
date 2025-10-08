@@ -1,8 +1,10 @@
 import { createSlice, PayloadAction  } from '@reduxjs/toolkit';
 import { stat } from 'fs';
 import { PrefixType } from '~/enums/Prefix.Type.enum';
+import { SoundType } from '~/enums/Sound.Type.enum';
 import { TaskStatus } from '~/enums/TaskStatus.Type.enum';
 import { TodoStatus } from '~/enums/TodoStatus.Type.enum';
+import SoundPlayer from '~/ui/helpers/utils/SoundPlayer';
 import { generateId } from '~/ui/helpers/utils/utils';
 
 const initialState: TodoFlow = {
@@ -53,7 +55,18 @@ const todoflowSlice = createSlice({
 
     addAndSetTaskBreak: (state) => {
       const newId = PrefixType.BREAK_PREFIX + generateId();
-      const breakTime = localStorage.getItem('breakTime') ? parseInt(localStorage.getItem('breakTime') as string) : 300;
+
+      let breakTime = 5; 
+      try {
+        const savedSettings = localStorage.getItem('settings');
+        if (savedSettings) {
+          const parsedSettings = JSON.parse(savedSettings);
+          breakTime = parsedSettings.breakTime ?? 300;
+        }
+      } catch (error) {
+        console.warn('Failed to load breakTime from settings, using default:', error);
+      }
+      
       const breakTask = {
         id: newId,
         title: 'Take a break',

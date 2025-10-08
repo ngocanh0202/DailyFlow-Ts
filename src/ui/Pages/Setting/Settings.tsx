@@ -1,17 +1,32 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect, useContext } from 'react';
 import { useAlert } from '~/ui/helpers/hooks/useAlert';
 import { useAppDispatch } from '~/ui/store/hooks';
 import { removeAllCartTasks } from '~/ui/store/task/taskCartSlice';
+import SoundPlayer from '~/ui/helpers/utils/SoundPlayer';
+import { getPageSize } from '~/shared/util.page';
+import { PageType } from '~/enums/PageType.enum';
+import { getOnMiddleInScreen } from '~/ui/helpers/utils/utils';
+import { IoIosArrowBack } from "react-icons/io";
+import { ThemeContext } from '~/ui/App';
+
 
 const Settings = () => {
   const dispatch = useAppDispatch();
-    const { success } = useAlert(); 
-  const [startWithWindows, setStartWithWindows] = useState(false);
-  const [breakTime, setBreakTime] = useState(300);
+  const { toggleTheme } = useContext(ThemeContext);
+  const { success } = useAlert(); 
+  const [settings, setSettings] = useState<AppSettings>({
+    startWithWindows: false,
+    breakTime: 300,
+    soundEnabled: true,
+    startupSoundEnabled: true,
+    volume: 1.0
+  });
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const soundPlayer = SoundPlayer.getInstance();
 
   const breakTimeOptions = [
+    { label: '5 Seconds', value: 5 },
     { label: '5 Minutes', value: 300 },
     { label: '10 Minutes', value: 600 },
     { label: '15 Minutes', value: 900 },
@@ -23,35 +38,65 @@ const Settings = () => {
     const loadSettings = async () => {
       try {
         if (window.electronAPI && window.electronAPI.getSettings) {
-          const settings = await window.electronAPI.getSettings();
-          setStartWithWindows(settings.startWithWindows ?? false);
-          setBreakTime(settings.breakTime ?? 300);
+          const loadedSettings = await window.electronAPI.getSettings();
+          setSettings({
+            startWithWindows: loadedSettings.startWithWindows ?? false,
+            breakTime: loadedSettings.breakTime ?? 300,
+            soundEnabled: loadedSettings.soundEnabled ?? true,
+            startupSoundEnabled: loadedSettings.startupSoundEnabled ?? true,
+            volume: loadedSettings.volume ?? 1.0
+          });
         } else {
-          const savedStartWithWindows = localStorage.getItem('startWithWindows');
-          const savedBreakTime = localStorage.getItem('breakTime');
-          if (savedStartWithWindows !== null) setStartWithWindows(savedStartWithWindows === 'true');
-          if (savedBreakTime !== null) setBreakTime(parseInt(savedBreakTime));
+          const savedSettings = localStorage.getItem('settings');
+          if (savedSettings) {
+            try {
+              const parsedSettings = JSON.parse(savedSettings);
+              setSettings({
+                startWithWindows: parsedSettings.startWithWindows ?? false,
+                breakTime: parsedSettings.breakTime ?? 300,
+                soundEnabled: parsedSettings.soundEnabled ?? true,
+                startupSoundEnabled: parsedSettings.startupSoundEnabled ?? true,
+                volume: parsedSettings.volume ?? 1.0
+              });
+            } catch (error) {
+              console.warn('Failed to parse saved settings, using defaults');
+            }
+          }
         }
+
+        // soundPlayer.setSoundEnabled(settings.soundEnabled);
+        // soundPlayer.setStartupSoundEnabled(settings.startupSoundEnabled);
+        // soundPlayer.setVolume(settings.volume);
+        // soundPlayer.saveSoundSettings();
+      
       } catch (error) {
         console.error('Error loading settings:', error);
       }
     };
+
+    const handleToResize = async () => {
+      const {width, height} = getPageSize(PageType.SETTING);
+      const { width: currentWidth, height: currentHeight} = await window.electronAPI.getUserScreenSize();
+      await window.electronAPI.smoothResizeAndMove('main', width, height, 60, 
+        getOnMiddleInScreen(currentWidth, currentHeight, width, height));
+    }
+    handleToResize();
     loadSettings();
   }, []);
 
   const handleSaveSettings = async () => {
     try {
-      const settings: AppSettings = {
-        startWithWindows,
-        breakTime
-      };
+      const soundPlayer = SoundPlayer.getInstance();
+      soundPlayer.setSoundEnabled(settings.soundEnabled);
+      soundPlayer.setStartupSoundEnabled(settings.startupSoundEnabled);
+      soundPlayer.setVolume(settings.volume);
+      soundPlayer.saveSoundSettings();
 
       if (window.electronAPI && window.electronAPI.saveSettings) {
         await window.electronAPI.saveSettings(settings);
       }
-      
-      localStorage.setItem('startWithWindows', String(settings.startWithWindows));
-      localStorage.setItem('breakTime', String(settings.breakTime));
+
+      localStorage.setItem('settings', JSON.stringify(settings));
       await success('Settings saved successfully!');
 
     } catch (error) {
@@ -64,24 +109,39 @@ const Settings = () => {
       if (window.electronAPI && window.electronAPI.deleteAllData) {
         await window.electronAPI.deleteAllData();
       } else {
-        localStorage.removeItem('startWithWindows');
-        localStorage.removeItem('breakTime');
+        localStorage.removeItem('settings');
       }
 
-      setStartWithWindows(false);
-      setBreakTime(300);
+      setSettings({
+        startWithWindows: false,
+        breakTime: 300,
+        soundEnabled: true,
+        startupSoundEnabled: true,
+        volume: 1.0
+      });
+
       setShowDeleteModal(false);
       dispatch(removeAllCartTasks());
+      
+      const soundPlayer = SoundPlayer.getInstance();
+      soundPlayer.setSoundEnabled(true);
+      soundPlayer.setStartupSoundEnabled(true);
+      soundPlayer.setVolume(1.0);
     } catch (error) {
       console.error('Error deleting data:', error);
     }
   };
 
   return (
-    <div className="p-8 current-background" style={{ minHeight: 'calc(100vh - 64px)' }}>
+    <div className="p-0 current-background" style={{ minHeight: 'calc(100vh - 64px)' }}>
       <div className="max-w-2xl mx-auto">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold mb-2 text-highlight">Settings</h1>
+          <div className="flex items-center gap-2">
+            <button className='btn btn-icon' onClick={() => window.history.back()}>
+              <IoIosArrowBack size={24} />
+            </button>
+            <h1 className="text-3xl font-bold mb-2 text-highlight">Settings</h1>
+          </div>
           <p style={{ color: 'var(--text-secondary)' }}>
             Configure your application preferences
           </p>
@@ -99,8 +159,8 @@ const Settings = () => {
               <label className="relative inline-flex items-center cursor-pointer ml-4">
                 <input
                   type="checkbox"
-                  checked={startWithWindows}
-                  onChange={(e) => setStartWithWindows(e.target.checked)}
+                  checked={settings.startWithWindows}
+                  onChange={(e) => setSettings(prev => ({ ...prev, startWithWindows: e.target.checked }))}
                   className="sr-only peer"
                 />
                 <div className="w-14 h-7 bg-gray-600 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[4px] after:bg-white after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-gradient-to-r peer-checked:from-purple-600 peer-checked:to-indigo-600"></div>
@@ -108,7 +168,6 @@ const Settings = () => {
             </div>
           </div>
 
-          {/* Break Time */}
           <div className="setting-item">
             <div className="py-4 border-b" style={{ borderColor: 'var(--border-color)' }}>
               <h3 className="text-lg font-semibold mb-1">Break Time Duration</h3>
@@ -116,8 +175,8 @@ const Settings = () => {
                 Set how long your break periods should last
               </p>
               <select
-                value={breakTime}
-                onChange={(e) => setBreakTime(parseInt(e.target.value))}
+                value={settings.breakTime}
+                onChange={(e) => setSettings(prev => ({ ...prev, breakTime: parseInt(e.target.value) }))}
                 className="w-full p-3 rounded-lg border-2 transition-all focus:outline-none"
                 style={{
                   background: 'var(--bg-tertiary)',
@@ -131,6 +190,99 @@ const Settings = () => {
                   </option>
                 ))}
               </select>
+            </div>
+          </div>
+
+          <div className="setting-item">
+            <div className="flex items-center justify-between py-4 border-b" style={{ borderColor: 'var(--border-color)' }}>
+              <div className="flex-1">
+                <h3 className="text-lg font-semibold mb-1">Enable All Sounds</h3>
+                <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
+                  Turn on/off all sound effects in the application
+                </p>
+              </div>
+              <label className="relative inline-flex items-center cursor-pointer ml-4">
+                <input
+                  type="checkbox"
+                  checked={settings.soundEnabled}
+                  onChange={(e) => setSettings(prev => ({ ...prev, soundEnabled: e.target.checked }))}
+                  className="sr-only peer"
+                />
+                <div className="w-14 h-7 bg-gray-600 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[4px] after:bg-white after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-gradient-to-r peer-checked:from-purple-600 peer-checked:to-indigo-600"></div>
+              </label>
+            </div>
+          </div>
+
+          <div className="setting-item">
+            <div className="flex items-center justify-between py-4 border-b" style={{ borderColor: 'var(--border-color)' }}>
+              <div className="flex-1">
+                <h3 className="text-lg font-semibold mb-1">Startup Sound</h3>
+                <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
+                  Play sound when the application starts
+                </p>
+              </div>
+              <label className="relative inline-flex items-center cursor-pointer ml-4">
+                <input
+                  type="checkbox"
+                  checked={settings.startupSoundEnabled && settings.soundEnabled}
+                  onChange={(e) => setSettings(prev => ({ ...prev, startupSoundEnabled: e.target.checked }))}
+                  disabled={!settings.soundEnabled}
+                  className="sr-only peer"
+                />
+                <div className={`w-14 h-7 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[4px] after:bg-white after:rounded-full after:h-6 after:w-6 after:transition-all ${
+                  settings.soundEnabled 
+                    ? 'bg-gray-600 peer-checked:bg-gradient-to-r peer-checked:from-purple-600 peer-checked:to-indigo-600' 
+                    : 'bg-gray-400 cursor-not-allowed'
+                }`}></div>
+              </label>
+            </div>
+          </div>
+
+          <div className="setting-item">
+            <div className="py-4 border-b" style={{ borderColor: 'var(--border-color)' }}>
+              <h3 className="text-lg font-semibold mb-1">Volume</h3>
+              <p className="text-sm mb-4" style={{ color: 'var(--text-secondary)' }}>
+                Adjust the volume of sound effects ({Math.round(settings.volume * 100)}%)
+              </p>
+              <div className="flex items-center gap-4">
+                <span className="text-sm">🔇</span>
+                <input
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.1"
+                  value={settings.volume}
+                  onChange={(e) => {
+                    const newVolume = parseFloat(e.target.value);
+                    setSettings(prev => ({ ...prev, volume: newVolume }));
+                    soundPlayer.setVolume(newVolume);
+                  }}
+                  disabled={!settings.soundEnabled}
+                  className={`range flex-1 ${!settings.soundEnabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+                />
+                <span className="text-sm">🔊</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Theme Toggle */}
+          <div className="setting-item">
+            <div className="flex items-center justify-between py-4 border-b" style={{ borderColor: 'var(--border-color)' }}>
+              <div className="flex-1">
+                <h3 className="text-lg font-semibold mb-1">Dark Theme</h3>
+                <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
+                  Switch between dark and light theme
+                </p>
+              </div>
+              <label className="relative inline-flex items-center cursor-pointer ml-4">
+                <input
+                  type="checkbox"
+                  checked={JSON.parse(localStorage.getItem('isDarkTheme') || 'true')}
+                  onChange={toggleTheme}
+                  className="sr-only peer"
+                />
+                <div className="w-14 h-7 bg-gray-600 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[4px] after:bg-white after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-gradient-to-r peer-checked:from-purple-600 peer-checked:to-indigo-600"></div>
+              </label>
             </div>
           </div>
 

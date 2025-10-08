@@ -7,12 +7,14 @@ import {
   IoSunnyOutline, 
   IoHomeOutline  
 } from "react-icons/io5";
+import { RiShutDownLine } from "react-icons/ri";
 import { FaTasks } from "react-icons/fa";
 import './DefaultLayout.css';
 import { PageType } from '~/enums/PageType.enum';
 import { useAppDispatch } from '../store/hooks';
 import { initializeTodoFlow } from '../store/todo/todoSlice';
 import TaskCart from '../components/TaskCart/TaskCart';
+import { useAlert } from '../helpers/hooks/useAlert';
 
 interface DefaultLayoutProps {
   children: ReactNode;
@@ -22,6 +24,9 @@ const DefaultLayout = ({ children }: DefaultLayoutProps) => {
   const navigate = useNavigate();
   const { isDarkTheme, toggleTheme } = useContext(ThemeContext);
   const dispatch = useAppDispatch();
+  const { 
+      ask, 
+  } = useAlert();
   const { onClearDraggable, onMakeDraggable, onDestroyDragger } = useContext(winDragger);
   const sidebar = useRef<(HTMLDivElement | null)>(null);
 
@@ -67,6 +72,19 @@ const DefaultLayout = ({ children }: DefaultLayoutProps) => {
           </button>
           <button className="btn-icon nav-btn" onClick={toggleTheme}>
             {isDarkTheme ? <IoMoonOutline /> : <IoSunnyOutline />}
+          </button>
+          <button 
+            className="btn-icon nav-btn" 
+            style={{ color: '#ef4444' }}
+            onClick={async () => {
+              const result = await ask('Are you sure you want to exit the application?', 'Confirm Exit', ['Yes', 'No']);
+              if (result.response === 0) { 
+                  await window.electronAPI.appClose();
+              } else if (result.response === 1) {
+                await window.electronAPI.appMinimize();
+              }
+            }}>
+            <RiShutDownLine />
           </button>
         </div>
       </nav>

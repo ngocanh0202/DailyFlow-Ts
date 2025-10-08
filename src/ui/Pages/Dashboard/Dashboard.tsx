@@ -73,7 +73,7 @@ const Dashboard = () => {
 
   return (
     <div className="h-full dashboard flex flex-col w-full max-w-full">
-      <h1 className='text-2xl font-bold'>Dashboards</h1>
+      <h1 className='text-2xl font-bold mb-2 text-highlight'>Dashboards</h1>
       <div className="mt-3 flex gap-4">
         <div className='flex-3'>
           <input 

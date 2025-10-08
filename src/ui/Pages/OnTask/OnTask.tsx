@@ -16,11 +16,16 @@ import { setCurrentTaskId, setStartTimer, setTodoStatus, setStopTimer, setTimeLe
 import { IoChevronBack } from "react-icons/io5";
 import { TaskStatus } from '~/enums/TaskStatus.Type.enum';
 import { TodoStatus } from '~/enums/TodoStatus.Type.enum';
+import { FaMinus } from "react-icons/fa6";
+import SoundPlayer from '~/ui/helpers/utils/SoundPlayer';
+import { SoundType } from '~/enums/Sound.Type.enum';
+
 
 const OnTask = () => {
   const navigate = useNavigate();
   const { onMakeDraggable, onClearDraggable } = useContext(winDragger);
   const dragElement = useRef<(HTMLDivElement | null)>(null);
+  const soundPlayer = SoundPlayer.getInstance();
   const textContainerRef = useRef<HTMLDivElement>(null);
   const textRef = useRef<HTMLDivElement>(null);
   const [shouldAnimate, setShouldAnimate] = useState(false);
@@ -79,6 +84,7 @@ const OnTask = () => {
           const message = isTaskBreak
             ? { title: 'Break Time Over', body: 'Your break time is over. Time to get back to work!' }
             : { title: 'Deadline Approaching', body: 'You are getting close to the deadline. Please complete your task on time.' };
+          soundPlayer.play(SoundType.SOUND_HAYAY);
           dispatch(setStopTimer());
           await notify(message.title, message.body);
         } catch (err) {
@@ -156,6 +162,7 @@ const OnTask = () => {
 
   const handleDoneTask = () => {
     if (todo.currentTaskId) {
+      soundPlayer.play(SoundType.SOUND_BOCCHI);
       dispatch(setTaskStatus(TaskStatus.COMPLETED));
       dispatch(setTodoStatus(TodoStatus.STOP));
     }
@@ -228,6 +235,12 @@ const OnTask = () => {
                   :
                   <TbLayoutBottombarCollapseFilled className='cursor-pointer animate-pop' onClick={handleExpand}/>
                 }
+
+                <FaMinus className='cursor-pointer animate-pop' 
+                          onClick={async () => {
+                  await window.electronAPI.appMinimize();
+                }}
+                />
                 
               </div>
           }

@@ -3,4 +3,5 @@ export enum PageType {
   TODOFLOW = 'todoflow',
   ONTASK = 'ontask',
   ONTASK_EXPANDED = 'ontask_expanded',
+  SETTING = 'setting',
 }

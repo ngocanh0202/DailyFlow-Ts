@@ -1,5 +1,7 @@
 {
   "name": "dailyflow",
+  "description": "A productivity desktop app to manage daily tasks and workflows.",
+  "author": "Ngoc Anh",
   "private": true,
   "version": "0.0.0",
   "type": "module",

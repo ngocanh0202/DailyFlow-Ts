@@ -53,6 +53,9 @@ interface Window {
     getSettings: () => Promise<AppSettings>;
     saveSettings: (settings: AppSettings) => Promise<void>;
     deleteAllData: () => Promise<void>;
+    // App close
+    appClose: () => Promise<void>;
+    appMinimize: () => Promise<boolean>;
   };
 }
 
@@ -89,5 +92,8 @@ interface HTMLDivElementWithPageTypeArray {
 
 interface AppSettings {
   startWithWindows: boolean;
-  breakTime: number; 
+  breakTime: number;
+  soundEnabled: boolean;
+  startupSoundEnabled: boolean;
+  volume: number;
 }

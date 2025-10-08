@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom';
-import { IoAddCircleOutline } from "react-icons/io5";
+import { IoAddCircleOutline, IoSettingsOutline } from "react-icons/io5";
 import { useContext, useEffect, useRef, useState } from "react";
 import Task from "~/ui/components/Task/Task";
 import { calculateProgressWidth, formatTime, generateId, getOnLeftInScreen } from "~/ui/helpers/utils/utils";
@@ -12,7 +12,6 @@ import {
   setStopTimer,
   setStartTimer,
   setTimeLeft,
-  setCurrentTaskId,
   setDoneAndNextTask,
   setChangeCurrentTask,
   setTaskStatus,
@@ -30,7 +29,9 @@ import { winDragger } from '~/ui/App';
 import { TaskStatus } from '~/enums/TaskStatus.Type.enum';
 import TaskPlayer from '~/ui/components/TaskPlayer/TaskPlayer';
 import { addTaskCart } from '~/ui/store/task/taskCartSlice';
-import { PrefixType } from '~/enums/Prefix.Type.enum';
+import SoundPlayer from '~/ui/helpers/utils/SoundPlayer';
+import { SoundType } from '~/enums/Sound.Type.enum';
+import { FaMinus } from 'react-icons/fa';
 
 const Todoflow = () => {
   const navigate = useNavigate();
@@ -47,6 +48,7 @@ const Todoflow = () => {
     todoFlow.tasks[todoFlow.currentTaskId || '']?.status !== TaskStatus.COMPLETED && 
     todoFlow.tasks[todoFlow.currentTaskId || '']?.status !== TaskStatus.IN_PROGRESS
   );
+  const soundPlayer = SoundPlayer.getInstance();
 
   useEffect(() =>{
     async function initDrag() {
@@ -93,7 +95,14 @@ const Todoflow = () => {
   useEffect(() =>{
     const handleByStatusChange = async () => {
       if(todoFlow.status === TodoStatus.STOP){
-        dispatch(setStopTimer());
+        if (todoFlow.currentTaskId && todoFlow.tasks[todoFlow.currentTaskId].isTaskBreak){
+          dispatch(setStartTimer(setInterval(() => {
+             dispatch(setTimeLeft(undefined));
+          }, 1000)));
+        }
+        else{
+          dispatch(setStopTimer());
+        }
         await window.electronAPI.setWindowAlwaysOnTop('main', false);
       }
       else if(todoFlow.status === TodoStatus.START_ON_PROGRESS){
@@ -122,8 +131,10 @@ const Todoflow = () => {
           let message = null;
           if (isTaskBreak){
             message = { title: 'Break Time Over', body: 'Your break time is over. Time to get back to work!' };
+            soundPlayer.play(SoundType.SOUND_SHINDERU);
           }else{
             message = { title: 'Deadline Approaching', body: 'You are getting close to the deadline. Please complete your task on time.' };
+            soundPlayer.play(SoundType.SOUND_HAYAY);
           }
           dispatch(setStopTimer());
           await notify(message.title, message.body);
@@ -219,9 +230,10 @@ const Todoflow = () => {
     if (!valid) {
       info('Please fix the errors in the tasks before starting.');
         setTimeout(() => {
-        const firstErrorElement = document.querySelector('.input-error');
+        const firstErrorElement = document.querySelector('.input-error') as HTMLInputElement;
         if (firstErrorElement) {
           firstErrorElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          firstErrorElement.focus();
         }
       }, 150);
     }
@@ -234,6 +246,7 @@ const Todoflow = () => {
     if (!isValid) {
       return;
     }
+    soundPlayer.play(SoundType.SOUND_GAMBUSTA);
     dispatch(setTodoStatus(TodoStatus.START_ON_PROGRESS));
     handleTodoCreation();
   };
@@ -254,15 +267,6 @@ const Todoflow = () => {
       info('Failed to save todo');
     }
   };
-
-  const handleClickBtnStop = () =>{
-    if (todoFlow.currentTaskId)
-      if (!todoFlow.tasks[todoFlow.currentTaskId].isTaskBreak) {
-          dispatch(setTodoStatus(TodoStatus.STOP));
-          dispatch(setCurrentTaskId(undefined));
-      }
-    dispatch(setStopTimer());
-  }
 
   return (
     <div className="h-full">
@@ -305,11 +309,27 @@ const Todoflow = () => {
               </button>
             )
           }
+          <button
+            className="btn btn-icon"
+            onClick={() => {
+              navigate('/setting');
+            }}
+          >
+            <IoSettingsOutline />
+          </button>
+          <button
+            className="btn btn-icon"
+            onClick={async () => {
+              await window.electronAPI.appMinimize();
+            }}
+          >
+            <FaMinus className='cursor-pointer animate-pop' />
+          </button>
         </div>
       </div>
   
       <div className="card mt-3">
-        <div className='flex items-center justify-between !font-bold'>
+        <div className='flex items-center justify-between'>
           <div>
             <span>Status: </span> <span className="text-highlight">{todoFlow.status == TodoStatus.STOP ? 'Stop' : 'Start'}</span>
           </div>
@@ -317,7 +337,7 @@ const Todoflow = () => {
             <span>Est: </span> <span className={todoFlow.actualTimeTodo > todoFlow.estimatedTimeTodo ? 'text-orange-500' : ''}>{formatTime(todoFlow.actualTimeTodo)} / {formatTime(todoFlow.estimatedTimeTodo)}</span>
           </div>
         </div>
-        <div className='flex items-center gap-2 !font-bold'>
+        <div className='flex items-center gap-2'>
           <div className="progress progress-xl">
               <div className="progress-bar" style={{ width: calculateProgressWidth(todoFlow.taskCompleted, todoFlow.taskTotal) }}></div>
           </div>
@@ -333,28 +353,27 @@ const Todoflow = () => {
             Start
           </button>
         </div>        
-        // : 
-        // <button className='btn btn-primary mt-3 w-full h-[35px] text-xxl' onClick={handleClickBtnStop} >Stop</button>
-      }
+       }
       <button className="btn btn-secondary mt-3 w-full h-[30px] text-2xl flex items-center justify-center"
         onClick={handleAddNewTask}>
         <IoAddCircleOutline />
       </button>
-      <div className="overflow-y-auto" style={{ maxHeight: 'calc(100vh - 250px)' }} ref={containerTaskDiv}>
+      <div className="overflow-y-auto" style={{ maxHeight: 'calc(100vh - 275px)' }} ref={containerTaskDiv}>
         {todoFlow.currentTaskId && (
           <TaskPlayer 
             task={todoFlow.tasks[todoFlow.currentTaskId]}
             isTimer={todoFlow.timer === null}
             isDoneTodo={todoFlow.taskCompleted === todoFlow.taskTotal} 
             onTakeBreak={() => {
-              const newId = PrefixType.BREAK_PREFIX + generateId();
               dispatch(addAndSetTaskBreak());
               setIsShouldScroll(false);
+              soundPlayer.play(SoundType.SOUND_CAU_MET_LAM_HA);
               dispatch(setStartTimer(setInterval(() => {
                 dispatch(setTimeLeft(undefined));
               }, 1000)));
             }}
             onStartTask={() => {
+              soundPlayer.play(SoundType.SOUND_SUGOI_SUGOI);
               dispatch(setStartTimer(setInterval(() => {
                 dispatch(setTimeLeft(undefined));
               }, 1000)));
@@ -365,6 +384,12 @@ const Todoflow = () => {
             onDoneTask={() => {
               setIsShouldScroll(false);
               if (todoFlow.currentTaskId) {
+                const currentTask = todoFlow.tasks[todoFlow.currentTaskId];
+                if (currentTask.isTaskBreak) {
+                  soundPlayer.play(SoundType.SOUND_SHINDERU);
+                } else {
+                  soundPlayer.play(SoundType.SOUND_BOCCHI);
+                }
                 dispatch(setTaskStatus(TaskStatus.COMPLETED));
                 dispatch(setTodoStatus(TodoStatus.STOP));
               }
@@ -372,6 +397,8 @@ const Todoflow = () => {
             onDoneAndNextTask={() => {
               const isValid = validationRules();
               if (!isValid) return;
+              setIsShouldScroll(false);
+              soundPlayer.play(SoundType.SOUND_GAMBUSTA);
               dispatch(setDoneAndNextTask());
             }}
             onChangeTask={(next: boolean, status: string) => {

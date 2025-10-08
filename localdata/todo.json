@@ -1,37 +1,5 @@
 {
   "items": [
-    {
-      "id": "id-q05dgg2jrh9",
-      "note": "12312",
-      "status": "Stop",
-      "taskCompleted": 1,
-      "taskTotal": 2,
-      "estimatedTimeTodo": 0,
-      "actualTimeTodo": 0,
-      "taskIds": [
-        "id-xbg9nuv84jk",
-        "id-7y3pw1l6ikp"
-      ],
-      "tasks": {
-        "id-xbg9nuv84jk": {
-          "id": "id-xbg9nuv84jk",
-          "title": "12312",
-          "estimatedTime": 0,
-          "actualTime": 0,
-          "subTasks": [],
-          "status": "Completed"
-        },
-        "id-7y3pw1l6ikp": {
-          "id": "id-7y3pw1l6ikp",
-          "title": "21412",
-          "estimatedTime": 0,
-          "actualTime": 0,
-          "subTasks": [],
-          "status": "Not Started"
-        }
-      },
-      "timeLeft": 0,
-      "timer": 16
-    }
+    
   ]
 }

@@ -7,6 +7,7 @@ import { addTaskCartsInRange, addTaskInCart, removeTaskInCart } from "~/ui/store
 import { addTask } from "~/ui/store/todo/todoSlice";
 import { generateId } from "~/ui/helpers/utils/utils";
 import { TaskStatus } from "~/enums/TaskStatus.Type.enum";
+import { useLocation } from "react-router-dom";
 
 interface TaskCartProps {
   className?: string;
@@ -16,6 +17,7 @@ const TaskCart = ({ className }: TaskCartProps) => {
   const dispatch = useAppDispatch();
   const tasks = useAppSelector((state) => state.taskCart);
   const [open, setOpen] = useState(false);
+  const location = useLocation();
 
   useEffect(() => {
     const fetchTasks = async () => {
@@ -26,7 +28,7 @@ const TaskCart = ({ className }: TaskCartProps) => {
   }, []);
 
   const handleAddTaskToTodoFlow = (taskId: string) => {
-    if (window.location.pathname === '/todoflow') {
+    if (location.pathname === '/todoflow') {
       const newTask = {...tasks.tasks[taskId], id: generateId(), status: TaskStatus.NOT_STARTED};
       dispatch(addTask(newTask));
     }

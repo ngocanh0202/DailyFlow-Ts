@@ -17,6 +17,10 @@ const defaultWindowConfig = {
     preload: getPreloadPath(),
     autoplayPolicy: 'no-user-gesture-required',
     spellcheck: false,
+    nodeIntegration: false,
+    contextIsolation: true,
+    enableRemoteModule: false,
+    webSecurity: true,
   }
 };
 
@@ -39,18 +43,23 @@ const createWindow = (windowType = 'main') => {
         preload: getPreloadPath(),
         autoplayPolicy: 'no-user-gesture-required',
         spellcheck: false,
+        nodeIntegration: false,
+        contextIsolation: true,
+        enableRemoteModule: false,
+        webSecurity: true,
       }
     };
   } else {
     config = { ...defaultWindowConfig };
   }
 
-
   const win = new BrowserWindow(config);
+
   if (isDev()) {
     win.loadURL('http://localhost:5123');
   } else {
-    win.loadFile(getUIPath());
+    const uiPath = getUIPath();
+    win.loadFile(uiPath);
   }
 
   windows.set(windowType, { window: win, type: windowType });
@@ -124,6 +133,7 @@ ipcMain.handle('set-window-always-on-top', async (event, windowId: string, isAlw
   }
   return false;
 });
+
 ipcMain.handle('create-window', async (event, windowType) => {
   return createWindow(windowType);
 });
@@ -154,10 +164,23 @@ ipcMain.handle('focus-window', async (event, windowId) => {
 
 // Task Store CRUD operations
 ipcMain.handle('task-upsert', async (event, task) => {
-  return await taskStore.upsert(task);
+  try {
+    const result = await taskStore.upsert(task);
+    return result;
+  } catch (error) {
+    console.error('IPC: task-upsert error:', error);
+    throw error;
+  }
 });
+
 ipcMain.handle('task-get-all', async () => {
-  return await taskStore.getAll();
+  try {
+    const result = await taskStore.getAll();
+    return result;
+  } catch (error) {
+    console.error('IPC: task-get-all error:', error);
+    throw error;
+  }
 });
 
 ipcMain.handle('task-get-by-id', async (event, id) => {
@@ -231,15 +254,34 @@ ipcMain.handle('get-user-screen-size', async () => {
   return { width, height };
 });
 
+// Window configuration handlers
+ipcMain.handle('get-window-sizes', async () => {
+  return windowConfigs;
+});
+
+ipcMain.handle('get-window-size', async (event, windowType: string) => {
+  const config = windowConfigs.items?.find((item: any) => item.type === windowType);
+  return config || null;
+});
+
+ipcMain.handle('get-window-types', async () => {
+  return windowConfigs.items?.map((item: any) => item.type) || [];
+});
+
+ipcMain.handle('has-window-type', async (event, windowType: string) => {
+  const config = windowConfigs.items?.find((item: any) => item.type === windowType);
+  return config !== null && config !== undefined;
+});
+
 // App settings using electron-store
 let store = new Store({ name: 'settings' });
 ipcMain.handle('get-settings', async () => {
   try {
     const settings = store.get('settings');
-    return settings || { startWithWindows: false, breakTime: 300 };
+    return settings || { startWithWindows: false, breakTime: 300, soundEnabled: true, startupSoundEnabled: true };
   } catch (err) {
     console.error('get-settings error:', err);
-    return { startWithWindows: false, breakTime: 300 };
+    return { startWithWindows: false, breakTime: 300, soundEnabled: true, startupSoundEnabled: true };
   }
 });
 
@@ -426,9 +468,31 @@ ipcMain.handle('system-notification', async (event, options) => {
   }
 });
 
+// App close and minimize
+ipcMain.handle('app-close', async () => {
+  app.quit();
+});
+ipcMain.handle('app-minimize', async () => {
+  const mainWin = windows.get('main')?.window;
+  if (mainWin) {
+    mainWin.minimize();
+    return true;
+  }
+  return false;
+});
+
 app.on('ready', async () => {
   app.setAppUserModelId('Dailyflow');
   app.setName('Dailyflow'); 
+  
+  try {
+    await taskStore.init();
+    await todoStore.init();
+    await windowConfig.init();
+  } catch (error) {
+    console.error('Failed to initialize JSON stores:', error);
+  }
+  
   await loadWindowConfigs();
   createWindow('main');
   app.on('activate', () => {
