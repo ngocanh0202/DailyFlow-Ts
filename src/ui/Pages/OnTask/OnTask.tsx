@@ -64,19 +64,30 @@ const OnTask = () => {
 
   useEffect(() => {
     const checkTimeEst = async () => {
-      if (!todo.currentTaskId || !todo) return;
-      let currEstTime = todo.tasks[todo.currentTaskId]?.estimatedTime;
-      if (todo.currentTaskId && todo.timeLeft === currEstTime && currEstTime > 0 && todo.tasks[todo.currentTaskId].status === TaskStatus.IN_PROGRESS) {
+      const currentTask = todo.currentTaskId && todo.tasks[todo.currentTaskId];
+      if (!currentTask || currentTask.status !== TaskStatus.IN_PROGRESS) return;
+
+      const { estimatedTime, isTaskBreak } = currentTask;
+      const { timeLeft } = todo;
+
+      const shouldNotify = 
+        estimatedTime > 0 && 
+        (timeLeft === estimatedTime || timeLeft === 0);
+
+      if (shouldNotify) {
         try {
-          await notify('Deadline Approaching', 'You are getting close to the deadline. Please complete your task on time.');
+          const message = isTaskBreak
+            ? { title: 'Break Time Over', body: 'Your break time is over. Time to get back to work!' }
+            : { title: 'Deadline Approaching', body: 'You are getting close to the deadline. Please complete your task on time.' };
+          
+          await notify(message.title, message.body);
         } catch (err) {
           console.error('Failed to show notification:', err);
         }
-        pauseTimer();
+        dispatch(setStopTimer());
       }
-    }
+    };
     checkTimeEst();
-    
   }, [todo.timeLeft]);
 
   useEffect(() => {
@@ -155,6 +166,8 @@ const OnTask = () => {
     await window.electronAPI.setWindowAlwaysOnTop('main', isTop);
   }
 
+  const canChangeTask = todo.currentTaskId && todo.tasks[todo.currentTaskId]?.isTaskBreak;
+
 
   return (
     <div className='h-full'>
@@ -185,7 +198,11 @@ const OnTask = () => {
               <span className='font-bold'>{todo.timeLeft != null ? formatTime(todo.timeLeft) : 'N/A'}</span> : 
               <div className='flex gap-1 justify-between items-center w-full'>
                 <button className='btn btn-primary h-[10px] w-[1px] text-sm' onClick={handleDoneTask}>Done!</button>
-                <BiSkipPrevious className='cursor-pointer animate-pop' onClick={() => {handleChangeTask(false, TaskStatus.PAUSED);}}/>
+
+                {canChangeTask ? null : (
+                  <BiSkipPrevious className='cursor-pointer animate-pop' onClick={() => {handleChangeTask(false, TaskStatus.PAUSED);}}/>
+                )}          
+                
                 {!todo.timer ? 
                   <FaPlay
                     className='cursor-pointer animate-pop'
@@ -198,7 +215,9 @@ const OnTask = () => {
                   :
                   <FaPause className='cursor-pointer animate-pop' onClick={() => {pauseTimer();}}/> 
                 }
-                <MdSkipNext className='cursor-pointer animate-pop' onClick={() => {handleChangeTask(true, TaskStatus.PAUSED);}}/>
+                {canChangeTask ? null : (
+                  <MdSkipNext className='cursor-pointer animate-pop' onClick={() => {handleChangeTask(true, TaskStatus.PAUSED);}}/>
+                )}
                 {
                   isExpanded ?
                   <TbLayoutNavbarCollapseFilled className='cursor-pointer animate-pop' onClick={handleExpand}/>

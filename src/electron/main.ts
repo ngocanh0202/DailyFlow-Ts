@@ -331,28 +331,71 @@ ipcMain.handle('system-notification', async (event, options) => {
       title,
       body,
       icon: iconPath,
-      silent: false,
-      timeoutType: 'never', 
-      
+      silent: false
     });
 
-    // notification.on('show', () => {
-    //   console.log('Notification shown - it will stay visible until clicked');
-    // });
-
-    // notification.on('click', () => {
-    //   console.log('Notification clicked - closing now');
-    //   notification.close();
-    // });
-
-    // notification.on('failed', (error) => {
-    //   console.log('Notification failed:', error);
-    // });
+    notification.on('click', () => {
+      const mainWin = windows.get('main')?.window;
+      if (mainWin) {
+        try {
+          if (mainWin.isMinimized && mainWin.isMinimized()) {
+            mainWin.restore();
+          }
+        } catch (e) {
+          console.error('Notification click error:', e);
+        }
+        mainWin.show();
+        mainWin.focus();
+      }
+    });
 
     notification.show();
     return true;
   } catch (error) {
     console.error('Notification error:', error);
+    return false;
+  }
+});
+// Set app as startup
+ipcMain.handle('set-auto-launch', async (event, enable: boolean) => {
+  const platform = process.platform;
+
+  try {
+    if (platform === 'darwin') {
+      app.setLoginItemSettings({
+        openAtLogin: enable,
+        openAsHidden: enable,
+        path: process.execPath,
+        args: []
+      });
+      return true;
+    } else if (platform === 'win32') {
+      app.setLoginItemSettings({
+        openAtLogin: enable,
+        path: app.getPath('exe'),
+        args: [] 
+      });
+      return true;
+    } else {
+      return false;
+    }
+  } catch (err) {
+    console.error('set-auto-launch error:', err);
+    return false;
+  }
+});
+
+ipcMain.handle('get-auto-launch', async () => {
+  try {
+    const settings = app.getLoginItemSettings();
+    return Boolean(
+      settings.openAtLogin ||
+      (settings as any).openAsHidden ||
+      (settings as any).enabled ||
+      (settings as any).wasOpenedAtLogin
+    );
+  } catch (err) {
+    console.error('get-auto-launch error:', err);
     return false;
   }
 });

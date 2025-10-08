@@ -17,7 +17,6 @@ const TaskInfo = ({ task, className }: TaskInfoProps) => {
   const { title, estimatedTime } = task;
 
   const handleDeleteTask = async () => {
-    console.log("Deleting task:", task);
     await window.electronAPI.taskRemove(task.id);
     dispatch(removeTaskCart(task.id));
   }

@@ -1,13 +1,6 @@
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
 
-interface TaskCart {
-  tasks: { [id: string]: Task };
-  taskIds: string[];
-  taskIdsInCart?: string[];
-
-}
-
-const initialState: TaskCart = {
+const initialState : TaskCart = {
   tasks: {},
   taskIds: [],
   taskIdsInCart: []
@@ -28,6 +21,7 @@ const taskCartSlice = createSlice({
       const taskId = action.payload;
       delete state.tasks[taskId];
       state.taskIds = state.taskIds.filter(id => id !== taskId);
+      state.taskIdsInCart = state.taskIdsInCart?.filter(id => id !== taskId);
     },
     addTaskCartsInRange: (state, action: PayloadAction<Task[]>) => {
       const tasks = action.payload;

@@ -52,7 +52,7 @@ const TaskCart = ({ className }: TaskCartProps) => {
                   return (
                     <div key={id} className="flex items-center mb-1">
                       <span className="mr-2 text-lg">•</span>
-                      <span className="flex-1 truncate">{task.title}</span>
+                      <span className="flex-1 truncate">{task?.title}</span>
                       <button
                         className="btn btn-icon btn-xs"
                         title="Add"

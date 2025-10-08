@@ -3,7 +3,7 @@ import { formatTime } from '~/ui/helpers/utils/utils';
 import { BiSkipPrevious } from 'react-icons/bi';
 import { FaPause, FaPlay } from 'react-icons/fa';
 import { MdSkipNext } from 'react-icons/md';
-import { IoPlaySkipForward } from "react-icons/io5";
+import { LuGamepad2 } from "react-icons/lu";
 import { TaskStatus } from '~/enums/TaskStatus.Type.enum';
 import myGif from '~/ui/assets/BocchiKitaGIF.gif';
 
@@ -16,6 +16,7 @@ interface TaskPlayerProps {
   onDoneTask: () => void;
   onDoneAndNextTask: () => void;
   onChangeTask: (next: boolean, status: string) => void;
+  onTakeBreak: () => void;
 }
 
 const TaskPlayer = ({ 
@@ -26,7 +27,8 @@ const TaskPlayer = ({
   onPauseTask, 
   onDoneTask, 
   onDoneAndNextTask,
-  onChangeTask 
+  onChangeTask,
+  onTakeBreak
 }: TaskPlayerProps) => {
   const textContainerRef = useRef<HTMLDivElement>(null);
   const textRef = useRef<HTMLDivElement>(null);
@@ -60,12 +62,21 @@ const TaskPlayer = ({
         <img 
           src={myGif} 
           alt="Task completed" 
-          className="w-100 h-45 object-contain"
+          className="w-100 h-70 object-contain"
         />
         <p className='font-bold'>{task.title}</p>
-        <button className="btn btn-primary" onClick={onDoneAndNextTask}>
-          {isDoneTodo ? 'All Done!' : 'Next Task'}
-        </button>
+        <div className='flex flex-col gap-2 items-center'>
+  
+          {!isDoneTodo && 
+          <button className='btn btn-secondary !p-1' onClick={onTakeBreak}>
+            <LuGamepad2 className='mr-2' />
+            Take Break!
+          </button>}
+          <button className="btn btn-primary !p-2" onClick={onDoneAndNextTask}>
+            {isDoneTodo ? 'All Done!' : 'Next Task'}
+          </button>
+        </div>
+
       </div>
     );
   }
@@ -102,10 +113,12 @@ const TaskPlayer = ({
               Done!
             </button>
             
-            <BiSkipPrevious 
-              className="cursor-pointer animate-pop" 
-              onClick={handlePreviousTask}
-            />
+            {!task.isTaskBreak && (
+              <BiSkipPrevious 
+                className="cursor-pointer animate-pop" 
+                onClick={handlePreviousTask}
+              />    
+            )}
             
             {isPaused ? (
               <FaPlay
@@ -118,11 +131,14 @@ const TaskPlayer = ({
                 onClick={onPauseTask} 
               />
             )}
-            
-            <MdSkipNext 
-              className="cursor-pointer animate-pop" 
-              onClick={handleNextTask}
-            />           
+
+            {!task.isTaskBreak && (
+              <MdSkipNext 
+                className="cursor-pointer animate-pop" 
+                onClick={handleNextTask}
+              />      
+            )}
+     
           </div>
         )}
       </div>

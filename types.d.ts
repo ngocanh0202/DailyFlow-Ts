@@ -49,6 +49,9 @@ interface Window {
         body: string;
         icon?: string;
     }) => Promise<boolean>;
+    // Set app as startup
+    setAutoLaunch: (enable: boolean) => Promise<void>;
+    getAutoLaunch: () => Promise<boolean>;
   };
 }
 

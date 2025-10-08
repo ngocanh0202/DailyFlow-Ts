@@ -1,4 +1,5 @@
 import { createSlice, PayloadAction  } from '@reduxjs/toolkit';
+import { PrefixType } from '~/enums/Prefix.Type.enum';
 import { TaskStatus } from '~/enums/TaskStatus.Type.enum';
 import { TodoStatus } from '~/enums/TodoStatus.Type.enum';
 
@@ -85,6 +86,11 @@ const todoflowSlice = createSlice({
         const task = state.tasks[taskIds];
         return count + (task && task.status === TaskStatus.COMPLETED ? 1 : 0);
       }, 0);
+      const totalActualTime = state.taskIds.reduce((total, taskIds) => {
+        const task = state.tasks[taskIds];
+        return total + (task ? task.actualTime : 0);
+      }, 0);
+      state.actualTimeTodo = totalActualTime;
       state.taskCompleted = numberOfCompletedTasks;
       state.estimatedTimeTodo = totalEstimatedTime;
     },
@@ -109,7 +115,20 @@ const todoflowSlice = createSlice({
     },
 
     setTaskStatus: (state, action: PayloadAction<TaskStatus>) => {
-      state.tasks[state.currentTaskId as string].status = action.payload;
+      const taskId = state.currentTaskId;
+      if (!taskId || !state.tasks[taskId]) return;
+      
+      const task = state.tasks[taskId];
+      task.status = action.payload;
+      
+      if (task.status === TaskStatus.COMPLETED && taskId.includes(PrefixType.BREAK_PREFIX)) {
+        delete state.tasks[taskId];
+        state.taskIds = state.taskIds.filter(id => id !== taskId);
+        state.taskTotal = Math.max(0, state.taskTotal - 1); 
+        state.currentTaskId = undefined;
+        state.timeLeft = 0;
+      }
+      
       todoflowSlice.caseReducers.calculateEstimatedTime(state);
     },
 
@@ -127,22 +146,21 @@ const todoflowSlice = createSlice({
     },
     
     setTimeLeft: (state, action: PayloadAction<number | undefined>) => {
-      if (state.currentTaskId && state.tasks[state.currentTaskId]) {
-        if (action.payload === undefined) {
-          if (state.timeLeft !== undefined) {
-            state.timeLeft = state.timeLeft + 1;
-            state.tasks[state.currentTaskId].actualTime = state.timeLeft;
-          }
-        } else {
-          state.timeLeft = action.payload;
-          state.tasks[state.currentTaskId].actualTime = action.payload;
-        }
-        const totalActualTime = state.taskIds.reduce((total, taskIds) => {
-          const task = state.tasks[taskIds];
-          return total + (task ? task.actualTime : 0);
-        }, 0);
-        state.actualTimeTodo = totalActualTime;
+      const task = state.currentTaskId && state.tasks[state.currentTaskId];
+      if (!task) return;
+
+      if (action.payload === undefined) {
+        const timeLeft = state.timeLeft ?? (task.isTaskBreak ? 1 : 0);
+        state.timeLeft = Math.max(0, task.isTaskBreak ? timeLeft - 1 : timeLeft + 1);
+      } else {
+        state.timeLeft = action.payload;
       }
+
+      task.actualTime = state.timeLeft;
+      state.actualTimeTodo = state.taskIds.reduce(
+        (total, id) => total + (state.tasks[id]?.actualTime || 0),
+        0
+      );
     },
 
     setStartTimer: (state, action: PayloadAction<NodeJS.Timeout | null>) => {
@@ -156,8 +174,8 @@ const todoflowSlice = createSlice({
 
     setStopTimer: (state) => {
       if (state.timer) {
-        const currentTaskStatus =  state.tasks[state.currentTaskId as string].status;
-        if (currentTaskStatus === TaskStatus.IN_PROGRESS) {
+        const currentTaskStatus =  state.tasks[state.currentTaskId as string]?.status;
+        if (currentTaskStatus === TaskStatus.IN_PROGRESS && state.currentTaskId) {
           state.tasks[state.currentTaskId as string].status = TaskStatus.PAUSED;
         }
         clearInterval(state.timer);
@@ -209,6 +227,22 @@ const todoflowSlice = createSlice({
           state.timeLeft = state.tasks[nextTaskId]?.actualTime || 0;
         }
       }
+    },
+
+    setResetTodoFlow: (state) => {
+      state.taskCompleted = 0;
+      state.status = TodoStatus.STOP;
+      state.currentTaskId = undefined;
+      state.timeLeft = 0;
+      state.taskIds.forEach(taskId => {
+        state.tasks[taskId].status = TaskStatus.NOT_STARTED;
+        state.tasks[taskId].actualTime = 0;
+      });
+      if (state.timer) {
+        clearInterval(state.timer);
+        state.timer = null;
+      }
+      todoflowSlice.caseReducers.calculateEstimatedTime(state);
     }
   },
 });
@@ -229,7 +263,8 @@ export const {
   setStartTimer,
   setStopTimer,
   setDoneAndNextTask,
-  setChangeCurrentTask
+  setChangeCurrentTask,
+  setResetTodoFlow
 } = todoflowSlice.actions;
 
 export default todoflowSlice.reducer;

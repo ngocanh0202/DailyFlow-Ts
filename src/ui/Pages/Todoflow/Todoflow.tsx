@@ -16,6 +16,7 @@ import {
   setDoneAndNextTask,
   setChangeCurrentTask,
   setTaskStatus,
+  setResetTodoFlow,
 } from "~/ui/store/todo/todoSlice";
 import { useAlert } from "~/ui/helpers/hooks/useAlert";
 import { getPageSize } from '~/shared/util.page';
@@ -23,11 +24,12 @@ import { PageType } from '~/enums/PageType.enum';
 import { TodoStatus } from '~/enums/TodoStatus.Type.enum';
 import { IoHomeOutline } from "react-icons/io5";
 import { IoMdArrowRoundUp } from "react-icons/io";
-import { RiCollapseDiagonalFill } from "react-icons/ri";
+import { RiCollapseDiagonalFill, RiResetLeftLine } from "react-icons/ri";
 import { winDragger } from '~/ui/App';
 import { TaskStatus } from '~/enums/TaskStatus.Type.enum';
 import TaskPlayer from '~/ui/components/TaskPlayer/TaskPlayer';
-import { addTaskCart, addTaskCartsInRange } from '~/ui/store/task/taskCartSlice';
+import { addTaskCart } from '~/ui/store/task/taskCartSlice';
+import { PrefixType } from '~/enums/Prefix.Type.enum';
 
 const Todoflow = () => {
   const navigate = useNavigate();
@@ -104,19 +106,33 @@ const Todoflow = () => {
 
   useEffect(() => {
     const checkTimeEst = async () => {
-      if (!todoFlow.currentTaskId || !todoFlow) return;
-      const currEstTime = todoFlow.tasks[todoFlow.currentTaskId]?.estimatedTime;
-      const timeLeft = todoFlow.timeLeft;
-      const currentTaskId = todoFlow.currentTaskId;
-      if (currentTaskId && timeLeft === currEstTime && currEstTime > 0 && todoFlow.tasks[currentTaskId].status === TaskStatus.IN_PROGRESS) {
+      const currentTask = todoFlow.currentTaskId && todoFlow.tasks[todoFlow.currentTaskId];
+      if (!currentTask || currentTask.status !== TaskStatus.IN_PROGRESS) return;
+
+      const { estimatedTime, isTaskBreak } = currentTask;
+      const { timeLeft } = todoFlow;
+
+      const shouldNotify = 
+        estimatedTime > 0 && 
+        (timeLeft === estimatedTime || timeLeft === 0);
+
+      if (shouldNotify) {
         try {
-          await notify('Deadline Approaching', 'You are getting close to the deadline. Please complete your task on time.');
+          let message = null;
+          if (isTaskBreak){
+            message = { title: 'Break Time Over', body: 'Your break time is over. Time to get back to work!' };
+          }else{
+            message = { title: 'Deadline Approaching', body: 'You are getting close to the deadline. Please complete your task on time.' };
+          }
+          
+          await notify(message.title, message.body);
         } catch (err) {
           console.error('Failed to show notification:', err);
         }
         dispatch(setStopTimer());
       }
-    }
+    };
+
     checkTimeEst();
   }, [todoFlow.timeLeft]);
 
@@ -204,7 +220,6 @@ const Todoflow = () => {
       info('Please fix the errors in the tasks before starting.');
         setTimeout(() => {
         const firstErrorElement = document.querySelector('.input-error');
-        console.log(firstErrorElement);
         if (firstErrorElement) {
           firstErrorElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
         }
@@ -241,65 +256,74 @@ const Todoflow = () => {
   };
 
   const handleClickBtnStop = () =>{
+    if (todoFlow.currentTaskId)
+      if (!todoFlow.tasks[todoFlow.currentTaskId].isTaskBreak) {
+          dispatch(setTodoStatus(TodoStatus.STOP));
+          dispatch(setCurrentTaskId(undefined));
+      }
     dispatch(setStopTimer());
-    dispatch(setTodoStatus(TodoStatus.STOP));
-    dispatch(setCurrentTaskId(undefined));
   }
 
   return (
     <div className="h-full">
-      <div className="mb-2 flex items-center justify-between" ref={topBarDrager}>
-        <div className='flex items-center'>
+      <div className="mb-2 flex items-center justify-between" >
+        <div className='flex items-center w-full'>
           <button className='btn btn-icon' onClick={() =>{
             dispatch(setStopTimer());
             navigate('/dashboard');
           }}><IoHomeOutline /></button>
-          <p className="text-sm text-gray-500">
-            {isNewTodo ? '🆕 Creating' : '✏️ Editing'}
-          </p>
+          <div className="text-sm text-gray-500 flex items-center gap-1 flex-1">
+            <p ref={topBarDrager}>
+              {isNewTodo ? '🆕' : '✏️'}
+            </p>
+            <div className='flex-1'>
+              <input 
+                type="text" 
+                className={`input input-primary z-50 ${noteError ? 'input-error' : ''}`} 
+                placeholder="Note" 
+                value={todoFlow.note}
+                onChange={handleNoteChange}
+                onBlur={handleNoteBlur}
+              />
+              {noteError && <p className="text-red-500 text-sm mt-1">{noteError}</p>}
+            </div>
+          </div>
         </div>
-        {
-          todoFlow.timer && (
-            <button className="btn btn-icon" onClick={() => {
-              const isValid = validationRules();
-              if (!isValid) return;
-              dispatch(setTodoStatus(TodoStatus.START_ON_PROGRESS));
-            }}>
-              <RiCollapseDiagonalFill />
-            </button>
-          )
-        }
+        <div className='flex items-center gap-1'>
+          <button className="btn btn-icon" onClick={() => {dispatch(setResetTodoFlow())}}>
+            <RiResetLeftLine />
+          </button>
+          {
+            todoFlow.timer && (
+              <button className="btn btn-icon" onClick={() => {
+                const isValid = validationRules();
+                if (!isValid) return;
+                dispatch(setTodoStatus(TodoStatus.START_ON_PROGRESS));
+              }}>
+                <RiCollapseDiagonalFill />
+              </button>
+            )
+          }
+        </div>
       </div>
-      <div>
-        <input 
-          type="text" 
-          className={`input input-primary ${noteError ? 'input-error' : ''}`} 
-          placeholder="Note" 
-          value={todoFlow.note}
-          onChange={handleNoteChange}
-          onBlur={handleNoteBlur}
-        />
-        {noteError && <p className="text-red-500 text-sm mt-1">{noteError}</p>}
-      </div>
+  
       <div className="card mt-3">
-        <span>Status: </span> <span className="text-highlight">{todoFlow.status == TodoStatus.STOP ? 'Stop' : 'Start'}</span>
-        <div className="progress progress-xl">
-            <div className="progress-bar" style={{ width: calculateProgressWidth(todoFlow.taskCompleted, todoFlow.taskTotal) }}></div>
+        <div className='flex items-center justify-between'>
+          <div>
+            <span>Status: </span> <span className="text-highlight">{todoFlow.status == TodoStatus.STOP ? 'Stop' : 'Start'}</span>
+          </div>
+          <div>
+            <span>Est: </span> <span className={todoFlow.actualTimeTodo > todoFlow.estimatedTimeTodo ? 'text-red-500' : ''}>{formatTime(todoFlow.actualTimeTodo)} / {formatTime(todoFlow.estimatedTimeTodo)}</span>
+          </div>
         </div>
-        <div className="flex justify-between text-sm mt-1">
-          <p>progress:</p>
-          <p>{`${todoFlow.taskCompleted}/${todoFlow.taskTotal}`}</p>
-        </div>
-        <div className='flex justify-between text-sm mt-1'>
-          <p>Actual time spent:</p>
-          <p>{formatTime(todoFlow.actualTimeTodo)}</p>
-        </div>
-        <div className="flex justify-between text-sm mt-1">
-          <p>Estimated time todo:</p>
-          <p>{formatTime(todoFlow.estimatedTimeTodo)}</p>
+        <div className='flex items-center gap-2'>
+          <div className="progress progress-xl">
+              <div className="progress-bar" style={{ width: calculateProgressWidth(todoFlow.taskCompleted, todoFlow.taskTotal) }}></div>
+          </div>
+          <p className='whitespace-nowrap'>{`${todoFlow.taskCompleted}/${todoFlow.taskTotal} done`}</p>
         </div>
       </div>
-      {(todoFlow.currentTaskId && todoFlow.tasks[todoFlow.currentTaskId].status === TaskStatus.PAUSED) || todoFlow.currentTaskId === undefined ? 
+      {!todoFlow.currentTaskId && 
         <div className='flex gap-2 mt-3'>
           <button 
             className={`btn btn-primary flex-5 w-full h-[35px] text-xxl ${todoFlow.status === 'Start' ? 'disabled' : ''}`} 
@@ -307,28 +331,37 @@ const Todoflow = () => {
           >
             Start
           </button>
-          <button className=
-            {`btn btn-secondary flex-1 w-full h-[35px] text-xxl 
-              ${todoFlow.currentTaskId && todoFlow.tasks[todoFlow.currentTaskId].status === TaskStatus.PAUSED ? 
-              '' : '!hidden'}`
-            } onClick={handleClickBtnStop}>
-            Stop
-          </button>
         </div>        
-        : 
-        <button className='btn btn-primary mt-3 w-full h-[35px] text-xxl' onClick={handleClickBtnStop}>Stop</button>
+        // : 
+        // <button className='btn btn-primary mt-3 w-full h-[35px] text-xxl' onClick={handleClickBtnStop} >Stop</button>
       }
-
       <button className="btn btn-secondary mt-3 w-full h-[30px] text-2xl flex items-center justify-center"
         onClick={handleAddNewTask}>
         <IoAddCircleOutline />
       </button>
-      <div className="overflow-y-auto" style={{ maxHeight: 'calc(100vh - 375px)' }} ref={containerTaskDiv}>
+      <div className="overflow-y-auto" style={{ maxHeight: 'calc(100vh - 250px)' }} ref={containerTaskDiv}>
         {todoFlow.currentTaskId && (
           <TaskPlayer 
             task={todoFlow.tasks[todoFlow.currentTaskId]}
             isTimer={todoFlow.timer === null}
             isDoneTodo={todoFlow.taskCompleted === todoFlow.taskTotal} 
+            onTakeBreak={() => {
+              const newId = PrefixType.BREAK_PREFIX + generateId();
+              dispatch(addTask({
+                id: newId,
+                title: 'Take a break',
+                estimatedTime: 6,
+                actualTime: 5,
+                subTasks: [],
+                isTaskBreak: true,
+                status: 'Not Started'
+              }));
+              setIsShouldScroll(false);
+              dispatch(setCurrentTaskId(newId));
+              dispatch(setStartTimer(setInterval(() => {
+                dispatch(setTimeLeft(undefined));
+              }, 1000)));
+            }}
             onStartTask={() => {
               dispatch(setStartTimer(setInterval(() => {
                 dispatch(setTimeLeft(undefined));
@@ -338,6 +371,7 @@ const Todoflow = () => {
               dispatch(setStopTimer());
             }}
             onDoneTask={() => {
+              setIsShouldScroll(false);
               if (todoFlow.currentTaskId) {
                 dispatch(setTaskStatus(TaskStatus.COMPLETED));
                 dispatch(setTodoStatus(TodoStatus.STOP));
