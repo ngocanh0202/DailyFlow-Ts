@@ -44,8 +44,11 @@ pnpm install
 # Run in development mode
 npm run dev
 
-# Build for win production
-npm run dist:win
+# Build production
+npm run transpile:electron
+npm run build
+npm run dist:win    # build windows
+npm run dist:mac    # build macOS
 ```
 
 ## 💻 Usage
