@@ -155,7 +155,10 @@ const Focus = () => {
 
   const handleDoneTask = () => {
     if (todo.currentTaskId) {
-      soundPlayer.play(SoundType.SOUND_BOCCHI);
+      if (todo.tasks[todo.currentTaskId].isTaskBreak) 
+        soundPlayer.play(SoundType.SOUND_SHINDERU);
+      else
+        soundPlayer.play(SoundType.SOUND_BOCCHI);
       dispatch(setTaskStatus(TaskStatus.COMPLETED));
       dispatch(setTodoStatus(TodoStatus.STOP));
     }

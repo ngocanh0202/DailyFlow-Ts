@@ -6,7 +6,8 @@ import { MdDeleteForever } from "react-icons/md";
 import { IoMdCloseCircleOutline } from "react-icons/io";
 import { formatTime, parseTime } from "~/ui/helpers/utils/utils";
 import { useAppSelector, useAppDispatch } from "~/ui/store/hooks";
-import { removeTask, reorderTasks, updateTask } from "~/ui/store/todo/todoSlice";
+import { insertNewTaskAtCurrentPosition, removeTask, reorderTasks, updateTask } from "~/ui/store/todo/todoSlice";
+import { CgInsertAfterR, CgInsertBeforeR } from "react-icons/cg";
 
 
 interface TaskProps {
@@ -18,7 +19,6 @@ interface TaskProps {
 const Task = ({ taskId, index, triggerValidation = false}: TaskProps) => {
   const dispatch = useAppDispatch();
   const task = useAppSelector((state) => state.todoflow.tasks[taskId]);
-  const currentTaskId = useAppSelector((state) => state.todoflow.currentTaskId);
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
   const [timeInputValue, setTimeInputValue] = useState<string>('');
   const [titleError, setTitleError] = useState<string>('');
@@ -187,7 +187,7 @@ const Task = ({ taskId, index, triggerValidation = false}: TaskProps) => {
           <div className="flex-1">
             <input 
               type="text" 
-              className={`input w-full ${titleError ? 'input-error' : ''}`} 
+              className={`input input-${task.id} w-full ${titleError ? 'input-error' : ''}`} 
               value={task?.title} 
               placeholder="Task title"
               onChange={(e) => handleTaskChange('title', e.target.value)}
@@ -198,15 +198,30 @@ const Task = ({ taskId, index, triggerValidation = false}: TaskProps) => {
         </div>
         <div className="relative flex items-center group">
           <button className="btn ">...</button>
-          <div className="absolute right-[-5px] top-[-5px] context-menu hidden group-hover:block">
+          <div className="absolute right-[-5px] top-[-10px] context-menu hidden group-hover:block">
             <div className="context-menu-item" onClick={() => handleOrderTask(index, index - 1)}>
               <i><FaCaretUp /></i> Move up
             </div>
             <div className="context-menu-item" onClick={() => handleOrderTask(index, index + 1)}>
               <i><FaCaretDown /></i> Move down
             </div>
-            <div className="context-menu-item">
-              <i><CiEdit /></i> More note
+            <div className="flex">
+              <button
+                className="context-menu-item flex-1"
+                onClick={() => {
+                  dispatch(insertNewTaskAtCurrentPosition({index, isDown: false}));
+                }}
+              >
+                <CgInsertAfterR /> <span className="whitespace-nowrap">Add above</span>
+              </button>
+              <button
+                className="context-menu-item flex-1 items-center justify-between"
+                onClick={() => {
+                  dispatch(insertNewTaskAtCurrentPosition({index, isDown: true}));
+                }}
+              >
+                <CgInsertBeforeR /> <span className="whitespace-nowrap">Add below</span> 
+              </button>
             </div>
             <div className="context-menu-item" onClick={() => { if (!task) return; handleTaskDelete(task?.id); }}>
               <i><MdDeleteForever /></i> Delete

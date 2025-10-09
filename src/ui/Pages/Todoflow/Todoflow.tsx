@@ -41,10 +41,6 @@ const Todoflow = () => {
   const [noteError, setNoteError] = useState<string>('');
   const [triggerTaskValidation, setTriggerTaskValidation] = useState<boolean>(false);
   const [isNewTodo, setIsNewTodo] = useState<boolean>(true);
-  const [isShouldScroll, setIsShouldScroll] = useState<boolean>(
-    todoFlow.tasks[todoFlow.currentTaskId || '']?.status !== TaskStatus.COMPLETED && 
-    todoFlow.tasks[todoFlow.currentTaskId || '']?.status !== TaskStatus.IN_PROGRESS
-  );
   const soundPlayer = SoundPlayer.getInstance();
 
   useEffect(() =>{
@@ -82,7 +78,12 @@ const Todoflow = () => {
   useEffect(() =>{
     const handleByStatusChange = async () => {
       if(todoFlow.status === TodoStatus.STOP){
-        if (todoFlow.currentTaskId && todoFlow.tasks[todoFlow.currentTaskId].isTaskBreak){
+        const currentTask = todoFlow.currentTaskId;
+        const isTaskBreak = currentTask ? todoFlow.tasks[currentTask]?.isTaskBreak : false;
+        const isTaskCompleted = currentTask ? todoFlow.tasks[currentTask]?.status === TaskStatus.COMPLETED : false;
+        const canTaskPlay = currentTask && isTaskBreak && !isTaskCompleted;
+        if (canTaskPlay){
+          console.log("Start break task timer");
           dispatch(setStartTimer(setInterval(() => {
              dispatch(setTimeLeft(undefined));
           }, 1000)));
@@ -133,21 +134,6 @@ const Todoflow = () => {
 
     checkTimeEst();
   }, [todoFlow.timeLeft]);
-
-  useEffect(() => {
-    if (containerTaskDiv.current && isShouldScroll) {
-      containerTaskDiv.current.scrollTo({
-          top: containerTaskDiv.current.scrollHeight,
-          behavior: "smooth"
-        });
-    }
-    if (!isShouldScroll){
-      setTimeout(() => {
-        setIsShouldScroll(true);
-      }, 100);
-    }
-      
-  }, [todoFlow.taskIds.length]);
 
   const handleNoteChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
@@ -353,7 +339,6 @@ const Todoflow = () => {
             isDoneTodo={todoFlow.taskCompleted === todoFlow.taskTotal} 
             onTakeBreak={() => {
               dispatch(addAndSetTaskBreak());
-              setIsShouldScroll(false);
               soundPlayer.play(SoundType.SOUND_CAU_MET_LAM_HA);
               dispatch(setStartTimer(setInterval(() => {
                 dispatch(setTimeLeft(undefined));
@@ -369,11 +354,11 @@ const Todoflow = () => {
               dispatch(setStopTimer());
             }}
             onDoneTask={() => {
-              setIsShouldScroll(false);
               if (todoFlow.currentTaskId) {
                 const currentTask = todoFlow.tasks[todoFlow.currentTaskId];
                 if (currentTask.isTaskBreak) {
                   soundPlayer.play(SoundType.SOUND_SHINDERU);
+                  dispatch(setStopTimer());
                 } else {
                   soundPlayer.play(SoundType.SOUND_BOCCHI);
                 }
@@ -384,9 +369,8 @@ const Todoflow = () => {
             onDoneAndNextTask={() => {
               const isValid = validationRules();
               if (!isValid) return;
-              setIsShouldScroll(false);
               soundPlayer.play(SoundType.SOUND_GAMBUSTA);
-              dispatch(setDoneAndNextTask());
+              dispatch(setDoneAndNextTask());            
             }}
             onChangeTask={(next: boolean, status: string) => {
               if (todoFlow && todoFlow.currentTaskId) {
