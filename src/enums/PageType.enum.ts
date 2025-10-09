@@ -1,7 +1,7 @@
 export enum PageType {
   MAIN = 'main',
   TODOFLOW = 'todoflow',
-  ONTASK = 'ontask',
-  ONTASK_EXPANDED = 'ontask_expanded',
+  FOCUS = 'focus',
+  FOCUS_EXPANDED = 'focus_expanded',
   SETTING = 'setting',
 }

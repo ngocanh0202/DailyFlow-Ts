@@ -1,8 +1,8 @@
 import { app, BrowserWindow, ipcMain, screen, dialog, Notification, nativeImage } from 'electron';
-import { getAssetPath, getIconPath, getPreloadPath, getUIPath } from '../pathResolver.js';
+import { getIconPath, getPreloadPath, getUIPath } from '../pathResolver.js';
 import { isDev} from '../shared/util.js';
 import { taskStore, todoStore, windowConfig } from '../shared/util.jsondata.js';
-import { GetCurrentPosition, handleDragWindow, smoothResizeAndMove, stopDragWindow } from '../shared/util.window.js';
+import { GetCurrentPosition, smoothResizeAndMove } from '../shared/util.window.js';
 import Store from 'electron-store';
 
 const windows = new Map();
@@ -356,18 +356,6 @@ ipcMain.handle(
     return false;
   }
 );
-
-// Drag window follow mouse
-ipcMain.handle("drag-window-start", async (event, windowType = "main", pageType: string) => {
-  const windowData = windows.get(windowType);
-  if (!windowData) return false;
-  const result = handleDragWindow(windowData.window, windowType, pageType);
-  return result;
-});
-ipcMain.handle("drag-window-stop", async (event, windowType = "main") => {
-  stopDragWindow(windowType);
-  return true;
-});
 
 // System Alert handlers
 ipcMain.handle('system-alert', async (event, options) => {

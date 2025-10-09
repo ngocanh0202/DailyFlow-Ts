@@ -43,13 +43,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ) =>
         ipcRenderer.invoke('smooth-resize-and-move',
             windowType, targetWidth, targetHeight, duration, targetPosition),
-    // Drag window
-    dragWindowStart: (page: string, windowType?: string) => {
-        return ipcRenderer.invoke('drag-window-start', windowType, page);
-    },
-    dragWindowStop: (windowType?: string) => {
-        return ipcRenderer.invoke('drag-window-stop', windowType);
-    },
     // System alerts
     systemAlert: (options: {
         type?: 'info' | 'warning' | 'error' | 'question';

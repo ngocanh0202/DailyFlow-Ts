@@ -163,7 +163,7 @@ const Settings = () => {
                   onChange={(e) => setSettings(prev => ({ ...prev, startWithWindows: e.target.checked }))}
                   className="sr-only peer"
                 />
-                <div className="w-14 h-7 bg-gray-600 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[4px] after:bg-white after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-gradient-to-r peer-checked:from-purple-600 peer-checked:to-indigo-600"></div>
+                <div className="click w-14 h-7 bg-gray-600 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[4px] after:bg-white after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-gradient-to-r peer-checked:from-purple-600 peer-checked:to-indigo-600"></div>
               </label>
             </div>
           </div>
@@ -177,7 +177,7 @@ const Settings = () => {
               <select
                 value={settings.breakTime}
                 onChange={(e) => setSettings(prev => ({ ...prev, breakTime: parseInt(e.target.value) }))}
-                className="w-full p-3 rounded-lg border-2 transition-all focus:outline-none"
+                className="click w-full p-3 rounded-lg border-2 transition-all focus:outline-none"
                 style={{
                   background: 'var(--bg-tertiary)',
                   color: 'var(--text-primary)',
@@ -208,7 +208,7 @@ const Settings = () => {
                   onChange={(e) => setSettings(prev => ({ ...prev, soundEnabled: e.target.checked }))}
                   className="sr-only peer"
                 />
-                <div className="w-14 h-7 bg-gray-600 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[4px] after:bg-white after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-gradient-to-r peer-checked:from-purple-600 peer-checked:to-indigo-600"></div>
+                <div className="click w-14 h-7 bg-gray-600 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[4px] after:bg-white after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-gradient-to-r peer-checked:from-purple-600 peer-checked:to-indigo-600"></div>
               </label>
             </div>
           </div>
@@ -229,7 +229,7 @@ const Settings = () => {
                   disabled={!settings.soundEnabled}
                   className="sr-only peer"
                 />
-                <div className={`w-14 h-7 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[4px] after:bg-white after:rounded-full after:h-6 after:w-6 after:transition-all ${
+                <div className={`click w-14 h-7 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[4px] after:bg-white after:rounded-full after:h-6 after:w-6 after:transition-all ${
                   settings.soundEnabled 
                     ? 'bg-gray-600 peer-checked:bg-gradient-to-r peer-checked:from-purple-600 peer-checked:to-indigo-600' 
                     : 'bg-gray-400 cursor-not-allowed'
@@ -258,14 +258,13 @@ const Settings = () => {
                     soundPlayer.setVolume(newVolume);
                   }}
                   disabled={!settings.soundEnabled}
-                  className={`range flex-1 ${!settings.soundEnabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  className={`click range flex-1 ${!settings.soundEnabled ? 'opacity-50 cursor-not-allowed' : ''}`}
                 />
                 <span className="text-sm">🔊</span>
               </div>
             </div>
           </div>
 
-          {/* Theme Toggle */}
           <div className="setting-item">
             <div className="flex items-center justify-between py-4 border-b" style={{ borderColor: 'var(--border-color)' }}>
               <div className="flex-1">
@@ -281,7 +280,7 @@ const Settings = () => {
                   onChange={toggleTheme}
                   className="sr-only peer"
                 />
-                <div className="w-14 h-7 bg-gray-600 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[4px] after:bg-white after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-gradient-to-r peer-checked:from-purple-600 peer-checked:to-indigo-600"></div>
+                <div className="click w-14 h-7 bg-gray-600 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[4px] after:bg-white after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-gradient-to-r peer-checked:from-purple-600 peer-checked:to-indigo-600"></div>
               </label>
             </div>
           </div>
@@ -294,7 +293,7 @@ const Settings = () => {
                 setIsSaving(false);
               }}
               disabled={isSaving}
-              className="btn-primary w-full py-3 text-lg save-btn"
+              className="btn btn-primary w-full py-3 text-lg save-btn"
             >
               {isSaving ? 'Saving...' : 'Save Settings'}
             </button>
@@ -313,7 +312,7 @@ const Settings = () => {
             </div>
             <button
               onClick={() => setShowDeleteModal(true)}
-              className="btn-secondary rounded-lg ml-4 px-6 py-2"
+              className="btn btn-secondary rounded-lg ml-4 px-6 py-2"
               style={{
                 borderColor: '#e53e3e',
                 color: '#e53e3e'
@@ -347,13 +346,13 @@ const Settings = () => {
             <div className="flex gap-3">
               <button
                 onClick={() => setShowDeleteModal(false)}
-                className="btn-secondary rounded-lg flex-1 py-3"
+                className="btn btn-secondary rounded-lg flex-1 py-3"
               >
                 Cancel
               </button>
               <button
                 onClick={handleDeleteData}
-                className="flex-1 py-3 !rounded-lg font-semibold text-white"
+                className="btn flex-1 py-3 !rounded-lg font-semibold text-white"
                 style={{
                   background: '#e53e3e',
                   border: 'none'

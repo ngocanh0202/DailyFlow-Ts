@@ -34,9 +34,6 @@ interface Window {
     hasWindowType: (windowType: string) => Promise<boolean>;
     // Smooth Resize and Move
     smoothResizeAndMove: (windowType: string, targetWidth: number, targetHeight: number, duration?: number, targetPosition?: { x: number; y: number }) => Promise<void>;
-    // Drag window follow mouse
-    dragWindowStart: (pageType: string, windowType?: string) => Promise<boolean>;
-    dragWindowStop: (windowType?: string) => Promise<boolean>;
     // System alerts
     systemAlert: (options: {
         type?: 'info' | 'warning' | 'error' | 'question';

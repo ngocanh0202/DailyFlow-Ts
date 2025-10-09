@@ -113,31 +113,35 @@ const TaskPlayer = ({
             </button>
             
             {!task.isTaskBreak && (
-              <BiSkipPrevious 
-                className="cursor-pointer animate-pop" 
+              <button className='btn btn-icon animate-pop'
                 onClick={handlePreviousTask}
-              />    
+              >
+                <BiSkipPrevious />
+              </button>
             )}
             
             {isPaused && !task.isTaskBreak && (
-              <FaPlay
-                className="cursor-pointer animate-pop"
-                onClick={onStartTask}
-              />
+              <button className='btn btn-icon animate-pop'
+                onClick={onStartTask} 
+              >
+                <FaPlay />
+              </button>
             )}
 
             {!isPaused && !task.isTaskBreak && (
-              <FaPause 
-                className="cursor-pointer animate-pop" 
-                onClick={onPauseTask} 
-              />
+              <button className='btn btn-icon animate-pop'
+                onClick={onPauseTask}
+              >
+                <FaPause />
+              </button>
             )}
 
             {!task.isTaskBreak && (
-              <MdSkipNext 
-                className="cursor-pointer animate-pop" 
+              <button className='btn btn-icon animate-pop'
                 onClick={handleNextTask}
-              />      
+              >
+                <MdSkipNext />
+              </button>
             )}
      
           </div>

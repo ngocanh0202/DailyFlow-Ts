@@ -1,6 +1,6 @@
-import { ReactNode, useContext, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { ReactNode, useContext} from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ThemeContext, winDragger } from '../App';
+import { ThemeContext } from '../App';
 import { 
   IoSettingsOutline, 
   IoMoonOutline, 
@@ -10,7 +10,6 @@ import {
 import { RiShutDownLine } from "react-icons/ri";
 import { FaTasks } from "react-icons/fa";
 import './DefaultLayout.css';
-import { PageType } from '~/enums/PageType.enum';
 import { useAppDispatch } from '../store/hooks';
 import { initializeTodoFlow } from '../store/todo/todoSlice';
 import TaskCart from '../components/TaskCart/TaskCart';
@@ -27,36 +26,12 @@ const DefaultLayout = ({ children }: DefaultLayoutProps) => {
   const { 
       ask, 
   } = useAlert();
-  const { onClearDraggable, onMakeDraggable, onDestroyDragger } = useContext(winDragger);
-  const sidebar = useRef<(HTMLDivElement | null)>(null);
-
-  useEffect(() => {
-    async function initDrag() {
-      try {
-        const arrayRef: HTMLDivElementWithPageTypeArray = {
-          elements: []
-        };
-        if (sidebar.current) {
-          arrayRef.elements.push({ element: sidebar.current, pageType: PageType.MAIN });
-        }
-        onClearDraggable(arrayRef.elements.map(el => el.element));
-        onMakeDraggable(arrayRef);
-      } catch (error) {
-        console.error('Error initializing drag:', error);
-      }
-    }
-
-    initDrag();
-    return () => {
-      onDestroyDragger();
-    };
-  }, []);
 
   return (
     <div className="layout-container">
-      <nav className="sidebar" ref={sidebar}>
+      <nav className="drag-area sidebar">
         <div className="nav-top">
-          <button className="btn-icon nav-btn" onClick={() => navigate('/dashboard')}>
+          <button className="btn btn-icon" onClick={() => navigate('/dashboard')}>
             <IoHomeOutline />
           </button>
           <button className="btn btn-primary h-[25px]" onClick={() => {
@@ -67,14 +42,14 @@ const DefaultLayout = ({ children }: DefaultLayoutProps) => {
           </button>
         </div>
         <div className="nav-bottom">
-          <button className="btn-icon nav-btn" onClick={() => navigate('/setting')}>
+          <button className="btn btn-icon" onClick={() => navigate('/setting')}>
             <IoSettingsOutline />
           </button>
-          <button className="btn-icon nav-btn" onClick={toggleTheme}>
+          <button className="btn btn-icon" onClick={toggleTheme}>
             {isDarkTheme ? <IoMoonOutline /> : <IoSunnyOutline />}
           </button>
           <button 
-            className="btn-icon nav-btn" 
+            className="btn btn-icon" 
             style={{ color: '#ef4444' }}
             onClick={async () => {
               const result = await ask('Are you sure you want to exit the application?', 'Confirm Exit', ['Yes', 'No']);

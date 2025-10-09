@@ -1,6 +1,5 @@
 import { useContext, useEffect, useRef, useState } from 'react';
-import './OnTask.css';
-import { winDragger } from '~/ui/App';
+import './Focus.css';
 import { PageType } from '~/enums/PageType.enum';
 import { formatTime, getOnTopRightInScreen } from '~/ui/helpers/utils/utils';
 import { useAlert } from '~/ui/helpers/hooks/useAlert';
@@ -21,10 +20,8 @@ import SoundPlayer from '~/ui/helpers/utils/SoundPlayer';
 import { SoundType } from '~/enums/Sound.Type.enum';
 
 
-const OnTask = () => {
+const Focus = () => {
   const navigate = useNavigate();
-  const { onMakeDraggable, onClearDraggable } = useContext(winDragger);
-  const dragElement = useRef<(HTMLDivElement | null)>(null);
   const soundPlayer = SoundPlayer.getInstance();
   const textContainerRef = useRef<HTMLDivElement>(null);
   const textRef = useRef<HTMLDivElement>(null);
@@ -114,17 +111,14 @@ const OnTask = () => {
 
   useEffect(() => {
     const handleToResize = async () => {
-      if (dragElement.current){
-        let pageType = PageType.ONTASK;
-        if (isExpanded) {
-          pageType = PageType.ONTASK_EXPANDED;
-        }
-        onMakeDraggable({ elements: [{element: dragElement.current, pageType: pageType}] });
-        const {width, height} = getPageSize(pageType);
-        const { width: currentWidth, height: currentHeight} = await window.electronAPI.getUserScreenSize();
-        await window.electronAPI.smoothResizeAndMove('main', width, height, 24, 
-          getOnTopRightInScreen(currentWidth, currentHeight, width, height));
+      let pageType = PageType.FOCUS;
+      if (isExpanded) {
+        pageType = PageType.FOCUS_EXPANDED;
       }
+      const {width, height} = getPageSize(pageType);
+      const { width: currentWidth, height: currentHeight} = await window.electronAPI.getUserScreenSize();
+      await window.electronAPI.smoothResizeAndMove('main', width, height, 24, 
+        getOnTopRightInScreen(currentWidth, currentHeight, width, height));
     }
     handleToResize();
   }, [isExpanded]);
@@ -140,7 +134,6 @@ const OnTask = () => {
   }
 
   const handleExpand = () => {
-    onClearDraggable([dragElement.current!]);
     setIsExpanded(prev => !prev);
   }
 
@@ -178,11 +171,18 @@ const OnTask = () => {
 
 
   return (
-    <div className='h-full'>
-      <div className={`flex gap-2 justify-between items-center px-1 sticky top-3 z-50`} ref={dragElement}>
-        <IoChevronBack className='cursor-pointer animate-pop' onClick={() => {
-            dispatch(setTodoStatus(TodoStatus.START_ON_TODO));
-          }}/>
+    <div className='h-full FocusPage'>
+      <div className={`flex gap-2 justify-between items-center px-1 sticky top-3 z-50 drag-area`}>
+        <div className='h-full  flex items-center'>
+          <button className='btn btn-icon !p-1 animate-pop no-drag'
+            onClick={() => {
+              dispatch(setTodoStatus(TodoStatus.START_ON_TODO));
+            }}
+          >
+            <IoChevronBack />
+          </button>
+        </div>
+
         <div 
           className='w-1 flex-5 overflow-hidden whitespace-nowrap' 
           ref={textContainerRef}
@@ -197,7 +197,7 @@ const OnTask = () => {
           </div>
         </div>
         <div 
-          className='flex-1 flex items-center h-full'
+          className='flex-1 flex items-center h-full no-drag'
           onMouseEnter={() => setisTimeHovered(true)}
           onMouseLeave={() => setisTimeHovered(false)}
         >
@@ -271,4 +271,4 @@ const OnTask = () => {
   );
 };
 
-export default OnTask;
+export default Focus;

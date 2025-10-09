@@ -32,35 +32,6 @@
   margin-bottom: 1rem;
 }
 
-.nav-btn {
-  background: var(--bg-tertiary);
-  color: var(--text-primary);
-  border: 2px solid var(--border-color);
-  border-radius: 8px;
-  padding: 0.5rem 0.75rem;
-  font-size: 1rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background 0.2s, border-color 0.2s;
-  width: 60px;
-  margin: 0 auto;
-}
-
-.btn-primary.nav-btn {
-  padding: 0.5rem 0.75rem;
-  font-size: 1rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background 0.2s, border-color 0.2s;
-  width: 60px;
-  margin: 0 auto;
-}
-
-.nav-btn:hover {
-  background: var(--bg-primary);
-  border-color: var(--accent-primary);
-}
-
 .main-content-area {
   flex: 1;
   padding: 1rem 2rem 2rem 2rem;
@@ -77,4 +48,3 @@
     margin-left: 0;
   }
 }
-

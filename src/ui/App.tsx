@@ -1,4 +1,4 @@
-import { useState, createContext, useCallback, useContext, useRef, useEffect } from 'react';
+import { useState, createContext, useEffect } from 'react';
 import { Routes, Route } from 'react-router-dom';
 import { Provider } from 'react-redux';
 import { store } from './store';
@@ -8,8 +8,7 @@ import Settings from './Pages/Setting/Settings';
 import DefaultLayout from './layouts/DefaultLayout';
 import Todoflow from './Pages/Todoflow/Todoflow';
 import AlertSystem from './components/AlertSystem/AlertSystem';
-import OnTask from './Pages/OnTask/OnTask';
-import WindowDragger from './helpers/utils/WindowDragger';
+import OnTask from './Pages/Focus/Focus';
 import { PageType } from '~/enums/PageType.enum';
 import SoundPlayer from './helpers/utils/SoundPlayer';
 import { SoundType } from '~/enums/Sound.Type.enum';
@@ -28,27 +27,10 @@ type ThemeContextType = {
   toggleTheme: () => void;
 };
 
-type WindowDraggerContextType = {
-  onGetDragger: () => WindowDragger | null;
-  onDestroyDragger: () => void;
-  onMakeDraggable: (element: HTMLDivElementWithPageTypeArray) => void;
-  onClearDraggable: (element?: HTMLElement[] | HTMLDivElement[]) => void;
-};
-
 export const ThemeContext = createContext<ThemeContextType>({
   isDarkTheme: true,
   toggleTheme: () => {},
 });
-
-export const winDragger = createContext<WindowDraggerContextType>({
-  onGetDragger: () => null,
-  onDestroyDragger: () => {},
-  onMakeDraggable: (element: HTMLDivElementWithPageTypeArray) => {},
-  onClearDraggable: (element?: HTMLElement[] | HTMLDivElement[]) => {},
-});
-
-const windowDraggerRef = new WindowDragger('main');
-
 
 function App() {
   const [isDarkTheme, setIsDarkTheme] = useState<boolean>(
@@ -70,52 +52,6 @@ function App() {
     });
   };
 
-  const handleDestroyDragger = () => {
-    if (windowDraggerRef) {
-      windowDraggerRef.destroy();
-    }
-  };
-
-  const handleClearDraggable = (htmls?: HTMLElement[] | HTMLDivElement[]) => {
-    try {
-      if (!windowDraggerRef) {
-        console.error('WindowDragger instance is not available.');
-        return;
-      }
-      if (htmls && htmls.length > 0) {
-        htmls.forEach((el) => {
-          if (windowDraggerRef) {
-            windowDraggerRef.removeDraggable(el);
-          }
-        });
-      } else {
-        windowDraggerRef.destroy();
-      }
-    } catch (error) {
-      console.error('Error clearing draggable elements:', error);
-    }
-  };
-
-  const handleMakeDraggable = (htmls: HTMLDivElementWithPageTypeArray) => {
-    try {
-      
-      if (!windowDraggerRef) {
-        console.error('WindowDragger instance is not available.');
-        return;
-      }
-      else if (htmls.elements.length > 0 && windowDraggerRef) {
-        htmls.elements.forEach((el) => {
-          if (windowDraggerRef) {
-            windowDraggerRef.makeDraggable(el.element, el.pageType);
-          }
-        });
-      }
-      
-    } catch (error) {
-      console.error('Error making element draggable:', error);
-    }
-  };
-
   useEffect(() => {
     const handleResetTodo = async () =>{
       try{
@@ -135,6 +71,9 @@ function App() {
           }
           if(settings.startupSoundEnabled !== undefined){
             soundPlayer.setStartupSoundEnabled(settings.startupSoundEnabled);
+          }
+          if(settings.volume !== undefined){
+            soundPlayer.setVolume(settings.volume); 
           }
           const audioElements = {
             [SoundType.SOUND_GAMBUSTA]: new Audio(sound_gambusta),
@@ -171,12 +110,6 @@ function App() {
   return (
     <Provider store={store}>
       <ThemeContext.Provider value={{ isDarkTheme, toggleTheme }}>
-        <winDragger.Provider value={{
-          onGetDragger: () => windowDraggerRef,
-          onDestroyDragger: handleDestroyDragger,
-          onMakeDraggable: handleMakeDraggable,
-          onClearDraggable: handleClearDraggable
-        }}>
           <DefaultLayout>
           <Routes>
             <Route path="/" element={<IndexPage />} />
@@ -188,7 +121,6 @@ function App() {
           </Routes>
           </DefaultLayout>
           <AlertSystem />
-        </winDragger.Provider>
       </ThemeContext.Provider>
     </Provider>
   );

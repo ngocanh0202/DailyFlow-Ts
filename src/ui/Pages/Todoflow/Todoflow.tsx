@@ -25,7 +25,6 @@ import { TodoStatus } from '~/enums/TodoStatus.Type.enum';
 import { IoHomeOutline } from "react-icons/io5";
 import { IoMdArrowRoundUp } from "react-icons/io";
 import { RiCollapseDiagonalFill, RiResetLeftLine } from "react-icons/ri";
-import { winDragger } from '~/ui/App';
 import { TaskStatus } from '~/enums/TaskStatus.Type.enum';
 import TaskPlayer from '~/ui/components/TaskPlayer/TaskPlayer';
 import { addTaskCart } from '~/ui/store/task/taskCartSlice';
@@ -36,10 +35,8 @@ import { FaMinus } from 'react-icons/fa';
 const Todoflow = () => {
   const navigate = useNavigate();
   const dispatch = useAppDispatch();
-  const { onMakeDraggable } = useContext(winDragger);
   const { info, notify } = useAlert();
   const todoFlow = useAppSelector((state) => state.todoflow);
-  const topBarDrager = useRef<(HTMLDivElement | null)>(null);
   const containerTaskDiv = useRef<(HTMLDivElement | null)>(null);
   const [noteError, setNoteError] = useState<string>('');
   const [triggerTaskValidation, setTriggerTaskValidation] = useState<boolean>(false);
@@ -51,22 +48,12 @@ const Todoflow = () => {
   const soundPlayer = SoundPlayer.getInstance();
 
   useEffect(() =>{
-    async function initDrag() {
-      try {
-        if (topBarDrager.current) {
-          onMakeDraggable({ elements: [{element: topBarDrager.current, pageType: PageType.TODOFLOW}] });
-        }
-      } catch (error) {
-        console.error('Error initializing drag:', error);
-      }
-    }
     const handleToResize = async () => {
       const {width, height} = getPageSize(PageType.TODOFLOW);
       const { width: currentWidth, height: currentHeight} = await window.electronAPI.getUserScreenSize();
       await window.electronAPI.smoothResizeAndMove('main', width, height, 60, 
         getOnLeftInScreen(currentWidth, currentHeight, width, height));
     }
-    initDrag();
     handleToResize();
   },[])
 
@@ -278,7 +265,7 @@ const Todoflow = () => {
             navigate('/dashboard');
           }}><IoHomeOutline /></button>
           <div className="text-sm text-gray-500 flex items-center gap-1 flex-1">
-            <p ref={topBarDrager}>
+            <p className='drag-area'>
               {isNewTodo ? '🆕' : '✏️'}
             </p>
             <div className='flex-1'>
