@@ -4,10 +4,10 @@
       "id": "id-uub4ssc74dh",
       "note": "ầdf",
       "status": "Stop",
-      "taskCompleted": 1,
+      "taskCompleted": 2,
       "taskTotal": 2,
       "estimatedTimeTodo": 10,
-      "actualTimeTodo": 2,
+      "actualTimeTodo": 5,
       "taskIds": [
         "id-sf50tz22bh9",
         "id-t2swwzw0b5"
@@ -17,22 +17,22 @@
           "id": "id-sf50tz22bh9",
           "title": "ầ",
           "estimatedTime": 5,
-          "actualTime": 2,
+          "actualTime": 3,
           "subTasks": [],
-          "status": "Not Started"
+          "status": "Completed"
         },
         "id-t2swwzw0b5": {
           "id": "id-t2swwzw0b5",
           "title": "ádasdsad",
           "estimatedTime": 5,
-          "actualTime": 0,
+          "actualTime": 2,
           "subTasks": [],
-          "status": "Not Started"
+          "status": "Completed"
         }
       },
       "timeLeft": 2,
-      "timer": 6,
-      "currentTaskId": "id-sf50tz22bh9"
+      "timer": 61,
+      "currentTaskId": "id-t2swwzw0b5"
     },
     {
       "id": "id-y5jc9ag8yro",
@@ -87,7 +87,7 @@
           "estimatedTime": 0,
           "actualTime": 1,
           "subTasks": [],
-          "status": "Completed"
+          "status": "Not Started"
         },
         "id-oc0rkm1fdnh": {
           "id": "id-oc0rkm1fdnh",

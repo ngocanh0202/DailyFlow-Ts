@@ -64,7 +64,7 @@ const TaskPlayer = ({
           alt="Task completed" 
           className="w-100 h-70 object-contain"
         />
-        <p className='font-bold'>{task.title}</p>
+        <p className='font-bold line-through'>{task.title}</p>
         <div className='flex flex-col gap-2 items-center'>
           <button className="btn btn-primary !p-2" onClick={onDoneAndNextTask}>
             {isDoneTodo ? 'All Done!' : 'Next Task'}
