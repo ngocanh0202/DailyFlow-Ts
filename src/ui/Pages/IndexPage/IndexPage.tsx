@@ -44,16 +44,37 @@ const IndexPage = () => {
         </div>
       </main>
       <div className='absolute top-10 left-25 font-mono'>
-        <div className='card-border rounded-lg p-3 shadow-lg relative'>
-          <div className='absolute left-[-5px] top-1/2 transform -translate-y-1/2 -translate-x-full'>
+        <div className='card-border rounded-lg p-3 shadow-lg relative max-w-sm'>
+          <div className='absolute left-[-5px] top-[35px] transform -translate-y-1/2 -translate-x-full'>
             <div className='w-0 h-0 border-t-[8px] border-t-transparent border-b-[8px] border-b-transparent border-r-[8px] card-border-triangle'></div>
           </div>
-          <p className='text-xl whitespace-nowrap font-bold'>
-            Click here!!! to start your task
-          </p>
-          <p className='text-xs whitespace-nowrap'>
-            Press enter the note and add new task to start
-          </p>
+          <div className='space-y-2'>
+            <p className='text-lg whitespace-nowrap font-bold text-center mb-3'>
+              Quick Start Guide
+            </p>
+            
+            <div className='text-xs space-y-1'>
+              <p className='font-semibold text-blue-400'>Getting Started:</p>
+              <p>• Click "this" to begin</p>
+              <p>• Add your tasks and start working</p>
+            </div>
+            
+            <div className='text-xs space-y-1 mt-3'>
+              <p className='font-semibold text-green-400'>Keyboard Shortcuts:</p>
+              <p>• <span className='font-mono bg-gray-700 px-1 rounded !text-white'>Ctrl+N</span> - New task</p>
+              <p>• <span className='font-mono bg-gray-700 px-1 rounded !text-white'>Ctrl+Shift+N</span> - Add subtask</p>
+              <p>• <span className='font-mono bg-gray-700 px-1 rounded !text-white'>Ctrl+D</span> - Delete task</p>
+              <p>• <span className='font-mono bg-gray-700 px-1 rounded !text-white'>Ctrl+Shift+F</span> - Focus mode</p>
+              <p>• <span className='font-mono bg-gray-700 px-1 rounded !text-white'>Ctrl+,</span> - Settings</p>
+            </div>
+            
+            <div className='text-xs space-y-1 mt-3'>
+              <p className='font-semibold text-yellow-400'>Tips:</p>
+              <p>• Focus on task input to use shortcuts</p>
+              <p>• Track your time efficiently</p>
+              <p>• Take breaks when needed</p>
+            </div>
+          </div>
         </div>
       </div>
     </div>

@@ -31,6 +31,7 @@ import { addTaskCart } from '~/ui/store/task/taskCartSlice';
 import SoundPlayer from '~/ui/helpers/utils/SoundPlayer';
 import { SoundType } from '~/enums/Sound.Type.enum';
 import { FaMinus } from 'react-icons/fa';
+import InputHandler from '~/ui/components/InputHandler/InputHandler';
 
 const Todoflow = () => {
   const navigate = useNavigate();
@@ -83,7 +84,6 @@ const Todoflow = () => {
         const isTaskCompleted = currentTask ? todoFlow.tasks[currentTask]?.status === TaskStatus.COMPLETED : false;
         const canTaskPlay = currentTask && isTaskBreak && !isTaskCompleted;
         if (canTaskPlay){
-          console.log("Start break task timer");
           dispatch(setStartTimer(setInterval(() => {
              dispatch(setTimeLeft(undefined));
           }, 1000)));
@@ -403,6 +403,7 @@ const Todoflow = () => {
       >
         <IoMdArrowRoundUp />
       </button>
+      <InputHandler />
     </div>
   );
 };

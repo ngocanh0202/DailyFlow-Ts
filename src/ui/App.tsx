@@ -53,14 +53,6 @@ function App() {
   };
 
   useEffect(() => {
-    const handleResetTodo = async () =>{
-      try{
-        await window.electronAPI.todoReset();
-      }catch(err){
-        console.error('Failed to reset todo on app start:', err);
-      }
-    }
-
     const handleLoadSettings = async () =>{
       try{
         const settings = await window.electronAPI.getSettings();
@@ -102,7 +94,6 @@ function App() {
       }
     }
 
-    handleResetTodo();
     handleLoadSettings();
     handleSetThemeOnStart();
   }, []);

@@ -1,158 +1,66 @@
 {
   "items": [
     {
-      "id": "id-f0q1ntz04fm",
-      "note": "Test",
-      "status": "Stop",
-      "taskCompleted": 1,
-      "taskTotal": 3,
-      "estimatedTimeTodo": 15,
-      "actualTimeTodo": 1,
-      "taskIds": [
-        "id-k7b031zaeu",
-        "id-t0pgwufy0tk",
-        "id-9rkahsd933"
-      ],
-      "tasks": {
-        "id-k7b031zaeu": {
-          "id": "id-k7b031zaeu",
-          "title": "Task 1",
-          "estimatedTime": 5,
-          "actualTime": 1,
-          "subTasks": [],
-          "status": "Not Started"
-        },
-        "id-t0pgwufy0tk": {
-          "id": "id-t0pgwufy0tk",
-          "title": "Task 2",
-          "estimatedTime": 5,
-          "actualTime": 0,
-          "subTasks": [],
-          "status": "Not Started"
-        },
-        "id-9rkahsd933": {
-          "id": "id-9rkahsd933",
-          "title": "Task 3",
-          "estimatedTime": 5,
-          "actualTime": 0,
-          "subTasks": [],
-          "status": "Not Started"
-        }
-      },
-      "timeLeft": 1,
-      "timer": 33,
-      "currentTaskId": "id-k7b031zaeu"
-    },
-    {
-      "id": "id-0n8boipf8wo",
-      "note": "asdas",
-      "status": "Stop",
+      "id": "id-yf8i143rwm",
+      "note": "áddas",
+      "status": "Start To Do",
       "taskCompleted": 1,
       "taskTotal": 3,
       "estimatedTimeTodo": 0,
-      "actualTimeTodo": 29,
+      "actualTimeTodo": 71,
       "taskIds": [
-        "id-wt2dylaujyd",
-        "id-7xoqypx860i",
-        "id-b9l0r5tzonm"
+        "id-8z9w9mlm0cx",
+        "id-kkc0b43gsie",
+        "id-9rib5pmvl2j"
       ],
       "tasks": {
-        "id-wt2dylaujyd": {
-          "id": "id-wt2dylaujyd",
+        "id-8z9w9mlm0cx": {
+          "id": "id-8z9w9mlm0cx",
+          "title": "qewqwewqe",
+          "estimatedTime": 0,
+          "actualTime": 0,
+          "subTasks": [],
+          "status": "Completed"
+        },
+        "id-kkc0b43gsie": {
+          "id": "id-kkc0b43gsie",
+          "title": "sds",
+          "estimatedTime": 0,
+          "actualTime": 71,
+          "subTasks": [
+            {
+              "id": "1",
+              "title": "dsds",
+              "completed": false
+            },
+            {
+              "id": "2",
+              "title": "dssd",
+              "completed": false
+            }
+          ],
+          "isTaskBreak": false,
+          "status": "In Progress"
+        },
+        "id-9rib5pmvl2j": {
+          "id": "id-9rib5pmvl2j",
           "title": "asd",
           "estimatedTime": 0,
-          "actualTime": 4,
-          "subTasks": [],
-          "status": "Not Started"
-        },
-        "id-7xoqypx860i": {
-          "id": "id-7xoqypx860i",
-          "title": "asd",
-          "estimatedTime": 0,
           "actualTime": 0,
-          "subTasks": [],
-          "status": "Not Started"
-        },
-        "id-b9l0r5tzonm": {
-          "id": "id-b9l0r5tzonm",
-          "title": "adsads",
-          "estimatedTime": 0,
-          "actualTime": 0,
-          "subTasks": [],
+          "subTasks": [
+            {
+              "id": "id-gkxjewxp5ew",
+              "title": "asddas",
+              "completed": false
+            }
+          ],
+          "isTaskBreak": false,
           "status": "Not Started"
         }
       },
-      "timeLeft": 4,
-      "timer": 32,
-      "currentTaskId": "id-wt2dylaujyd"
-    },
-    {
-      "id": "id-v2337a65n7",
-      "note": "asddsa",
-      "status": "Stop",
-      "taskCompleted": 1,
-      "taskTotal": 2,
-      "estimatedTimeTodo": 0,
-      "actualTimeTodo": 3,
-      "taskIds": [
-        "id-op0ofm7sa39",
-        "id-aqi40fchj8d"
-      ],
-      "tasks": {
-        "id-op0ofm7sa39": {
-          "id": "id-op0ofm7sa39",
-          "title": "qweqwe",
-          "estimatedTime": 0,
-          "actualTime": 3,
-          "subTasks": [],
-          "status": "Not Started"
-        },
-        "id-aqi40fchj8d": {
-          "id": "id-aqi40fchj8d",
-          "title": "zcxcxz",
-          "estimatedTime": 0,
-          "actualTime": 0,
-          "subTasks": [],
-          "status": "Not Started"
-        }
-      },
-      "timeLeft": 3,
-      "timer": 7,
-      "currentTaskId": "id-op0ofm7sa39"
-    },
-    {
-      "id": "id-rey7onyk21",
-      "note": "fdsfds",
-      "status": "Stop",
-      "taskCompleted": 1,
-      "taskTotal": 2,
-      "estimatedTimeTodo": 86400,
-      "actualTimeTodo": 21,
-      "taskIds": [
-        "id-fag67kn48le",
-        "id-vkmbah674y"
-      ],
-      "tasks": {
-        "id-fag67kn48le": {
-          "id": "id-fag67kn48le",
-          "title": "231312",
-          "estimatedTime": 0,
-          "actualTime": 1,
-          "subTasks": [],
-          "status": "Not Started"
-        },
-        "id-vkmbah674y": {
-          "id": "id-vkmbah674y",
-          "title": "asads",
-          "estimatedTime": 86400,
-          "actualTime": 0,
-          "subTasks": [],
-          "status": "Not Started"
-        }
-      },
-      "timeLeft": 1,
-      "timer": 54,
-      "currentTaskId": "id-fag67kn48le"
+      "timeLeft": 71,
+      "timer": 62,
+      "currentTaskId": "id-kkc0b43gsie"
     }
   ]
 }

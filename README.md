@@ -65,7 +65,6 @@ npm run dist:mac    # build macOS
 | Action | Shortcut (Win/Linux) | Shortcut (macOS) |
 |--------|---------------------|------------------|
 | New Task | `Ctrl + N` | `Cmd + N` |
-| Search | `Ctrl + F` | `Cmd + F` |
 | Toggle Theme | `Ctrl + T` | `Cmd + T` |
 | Focus Mode | `Ctrl + Shift + F` | `Cmd + Shift + F` |
 | Settings | `Ctrl + ,` | `Cmd + ,` |

@@ -111,7 +111,7 @@ const createWindow = (windowType = 'main') => {
   if (windowConfig) {
     config = {
       ...windowConfig,
-      icon: getIconPath("desktopIcon.png"),
+      icon: getIconPath("trayIcon.png"),
       webPreferences: {
         ...windowConfig.webPreferences,
         preload: getPreloadPath(),

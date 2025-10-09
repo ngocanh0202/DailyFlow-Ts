@@ -4,7 +4,7 @@ import { FaCaretDown, FaCaretUp } from "react-icons/fa";
 import { IoAddCircleOutline } from "react-icons/io5";
 import { MdDeleteForever } from "react-icons/md";
 import { IoMdCloseCircleOutline } from "react-icons/io";
-import { formatTime, parseTime } from "~/ui/helpers/utils/utils";
+import { formatTime, generateId, parseTime } from "~/ui/helpers/utils/utils";
 import { useAppSelector, useAppDispatch } from "~/ui/store/hooks";
 import { insertNewTaskAtCurrentPosition, removeTask, reorderTasks, updateTask } from "~/ui/store/todo/todoSlice";
 import { CgInsertAfterR, CgInsertBeforeR } from "react-icons/cg";
@@ -187,7 +187,7 @@ const Task = ({ taskId, index, triggerValidation = false}: TaskProps) => {
           <div className="flex-1">
             <input 
               type="text" 
-              className={`input input-${task.id} w-full ${titleError ? 'input-error' : ''}`} 
+              className={`input task-input input-${task.id} w-full ${titleError ? 'input-error' : ''}`} 
               value={task?.title} 
               placeholder="Task title"
               onChange={(e) => handleTaskChange('title', e.target.value)}
@@ -251,7 +251,7 @@ const Task = ({ taskId, index, triggerValidation = false}: TaskProps) => {
       <div className="px-2 mt-3 ">
         <button className="add-task flex items-center gap-2 btn btn-icon" onClick={() => {
             if (!task) return;
-              const newSubTasks = [...task.subTasks, { id: `${task.subTasks.length + 1}`, title: '', completed: false }];
+              const newSubTasks = [...task.subTasks, { id: `${generateId()}`, title: '', completed: false }];
               dispatch(updateTask({ id: taskId, updates: { subTasks: newSubTasks } }));
             }}>
           <IoAddCircleOutline />
@@ -274,7 +274,7 @@ const Task = ({ taskId, index, triggerValidation = false}: TaskProps) => {
                     ref={(el) => inputRefs.current[index] = el}
                     type="text"
                     placeholder="Subtask title"
-                    className={`input w-full ${subTaskErrors[index] ? 'input-error' : ''}`}
+                    className={`input input-${subTask.id} w-full ${subTaskErrors[index] ? 'input-error' : ''}`}
                     value={subTask.title}
                     onChange={(e) => handleSubTaskChange(index, e.target.value)}
                     onBlur={() => handleSubTaskBlur(index)}

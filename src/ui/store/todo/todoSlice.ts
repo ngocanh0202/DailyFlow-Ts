@@ -89,10 +89,27 @@ const todoflowSlice = createSlice({
     },
     
     removeTask: (state, action: PayloadAction<string>) => {
-      const taskIds = action.payload;
-      delete state.tasks[taskIds];
-      state.taskIds = state.taskIds.filter(id => id !== taskIds);
+      const taskIdToRemove = action.payload;
+
+      const tasksIdExpecBreak = state.taskIds.filter(id => !id.includes(PrefixType.BREAK_PREFIX));
+      const originalIndex = tasksIdExpecBreak.indexOf(taskIdToRemove);
+
+      delete state.tasks[taskIdToRemove];
+      state.taskIds = state.taskIds.filter(id => id !== taskIdToRemove);
       todoflowSlice.caseReducers.calculateEstimatedTime(state);
+      
+      let itemIdToFocus: string | undefined;
+      
+      if (tasksIdExpecBreak.length > 0) {
+        if (originalIndex > 0 && originalIndex <= tasksIdExpecBreak.length) {
+          itemIdToFocus = tasksIdExpecBreak[originalIndex - 1];
+        } else if (originalIndex === 0 && tasksIdExpecBreak.length > 0) {
+          itemIdToFocus = tasksIdExpecBreak[0];
+        }
+      }
+      if (itemIdToFocus) {
+        todoflowSlice.caseReducers.inputIdToFocus(state, { payload: itemIdToFocus, type: 'inputIdToFocus' });
+      }
     },
     
     updateTask: (state, action: PayloadAction<{ id: string; updates: Partial<Task> }>) => {
@@ -100,6 +117,13 @@ const todoflowSlice = createSlice({
       if (state.tasks[id]) {
         state.tasks[id] = { ...state.tasks[id], ...updates };
         todoflowSlice.caseReducers.calculateEstimatedTime(state);
+      }
+    },
+
+    addSubTask: (state, action: PayloadAction<{ taskId: string; subTask: SubTask }>) => {
+      const { taskId, subTask } = action.payload;
+      if (state.tasks[taskId]) {
+        state.tasks[taskId].subTasks.push(subTask);
       }
     },
     
@@ -310,6 +334,7 @@ export const {
   addAndSetTaskBreak,
   removeTask,
   updateTask,
+  addSubTask,
   reorderTasks,
   calculateEstimatedTime,
   setTodoStatus,
@@ -322,7 +347,8 @@ export const {
   setDoneAndNextTask,
   setChangeCurrentTask,
   setResetTodoFlow,
-  insertNewTaskAtCurrentPosition
+  insertNewTaskAtCurrentPosition,
+  inputIdToFocus
 } = todoflowSlice.actions;
 
 export default todoflowSlice.reducer;
