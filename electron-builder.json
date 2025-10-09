@@ -7,7 +7,7 @@
     "src/assets",
     "localdata"
   ],
-  "icon": "./desktopIcon.jpg",
+  "icon": "./desktopIcon.png",
   "directories": {
     "output": "release"
   },

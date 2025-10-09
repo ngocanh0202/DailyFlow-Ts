@@ -7,7 +7,7 @@
       "taskCompleted": 2,
       "taskTotal": 2,
       "estimatedTimeTodo": 10,
-      "actualTimeTodo": 5,
+      "actualTimeTodo": 3,
       "taskIds": [
         "id-sf50tz22bh9",
         "id-t2swwzw0b5"
@@ -17,9 +17,9 @@
           "id": "id-sf50tz22bh9",
           "title": "ầ",
           "estimatedTime": 5,
-          "actualTime": 3,
+          "actualTime": 1,
           "subTasks": [],
-          "status": "Completed"
+          "status": "Not Started"
         },
         "id-t2swwzw0b5": {
           "id": "id-t2swwzw0b5",
@@ -27,11 +27,11 @@
           "estimatedTime": 5,
           "actualTime": 2,
           "subTasks": [],
-          "status": "Completed"
+          "status": "Not Started"
         }
       },
       "timeLeft": 2,
-      "timer": 61,
+      "timer": 26,
       "currentTaskId": "id-t2swwzw0b5"
     },
     {

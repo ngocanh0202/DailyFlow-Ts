@@ -325,7 +325,7 @@ export const setupIpcMainHandlers = () => {
 
   ipcMain.handle(IpcMainName.SYSTEM_NOTIFICATION, async (event, options) => {
     const { title, body, icon } = options;
-    const iconPath = icon ? getIconPath(icon) : getIconPath("windowIcon.png");
+    const iconPath = icon ? getIconPath(icon) : getIconPath("desktopIcon.png");
 
     try {
       if (!Notification.isSupported()) {

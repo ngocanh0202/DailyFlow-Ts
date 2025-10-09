@@ -66,10 +66,10 @@ const GetCurrentPosition = (win: BrowserWindow) => {
 const createTray = (mainWindow: BrowserWindow) => {
   if (!mainWindow) return;
   let tray = null;
-  const icon = nativeImage.createFromPath(getIconPath("windowIcon.png"));
+  const icon = nativeImage.createFromPath(getIconPath("desktopIcon.png"));
   tray = new Tray(icon.resize({ width: 16, height: 16 }));
   
-  tray.setToolTip('Tên App của bạn');
+  tray.setToolTip('Daily Flow');
 
   const contextMenu = Menu.buildFromTemplate([
     {
@@ -111,7 +111,7 @@ const createWindow = (windowType = 'main') => {
   if (windowConfig) {
     config = {
       ...windowConfig,
-      icon: getIconPath("windowIcon.png"),
+      icon: getIconPath("desktopIcon.png"),
       webPreferences: {
         ...windowConfig.webPreferences,
         preload: getPreloadPath(),

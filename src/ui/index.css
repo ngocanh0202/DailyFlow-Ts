@@ -21,7 +21,7 @@
 .main-content-area, .card {
   cursor: url('./assets/cursors/normal.cur'), auto !important;
 }
-button, .click {
+button, .click, .context-menu-item {
   cursor: url('./assets/cursors/click.cur'), auto !important;
 }
 input, select, textarea {
@@ -38,7 +38,7 @@ input, select, textarea {
     --bg-secondary: #2d2d2d;
     --bg-tertiary: #3a3a3a;
     --text-primary: #ffffff;
-    --text-secondary: #b3b3b3;
+    --text-secondary: #718096;
     --text-muted: #808080;
     --accent-primary: #667eea;
     --accent-secondary: #764ba2;
@@ -55,7 +55,7 @@ input, select, textarea {
     --bg-secondary: #f8fafc;
     --bg-tertiary: #ffffff;
     --text-primary: #1a202c;
-    --text-secondary: #4a5568;
+    --text-secondary: #718096;
     --text-muted: #718096;
     --accent-primary: #667eea;
     --accent-secondary: #764ba2;
