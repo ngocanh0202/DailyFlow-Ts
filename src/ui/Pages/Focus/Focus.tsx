@@ -74,7 +74,7 @@ const Focus = () => {
 
       const shouldNotify = 
         estimatedTime > 0 && 
-        (timeLeft === estimatedTime || timeLeft === 0);
+        (timeLeft === estimatedTime || (timeLeft === 0 && isTaskBreak));
 
       if (shouldNotify) {
         try {
