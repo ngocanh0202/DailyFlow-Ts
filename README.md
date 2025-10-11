@@ -20,7 +20,7 @@ DailyFlow-Ts is a powerful, cross-platform desktop application built with Electr
 
 **Option 1: Download Pre-built Release**
 
-Visit the [Releases](https://github.com/yourusername/dailyflow-ts/releases) page and download the installer for your platform:
+Visit the [Releases](https://github.com/ngocanh0202/dailyflow-ts/releases) page and download the installer for your platform:
 - Windows: `.exe` installer
 - macOS: `.dmg` or `.app`
 - Linux: `.AppImage`, `.deb`, or `.rpm`
