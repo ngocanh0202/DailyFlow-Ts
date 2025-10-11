@@ -3,8 +3,8 @@
     {
       "id": "id-yf8i143rwm",
       "note": "áddas",
-      "status": "Start To Do",
-      "taskCompleted": 0,
+      "status": "Stop",
+      "taskCompleted": 1,
       "taskTotal": 3,
       "estimatedTimeTodo": 5,
       "actualTimeTodo": 0,
@@ -20,7 +20,7 @@
           "estimatedTime": 3,
           "actualTime": 0,
           "subTasks": [],
-          "status": "In Progress"
+          "status": "Completed"
         },
         "id-kkc0b43gsie": {
           "id": "id-kkc0b43gsie",
@@ -59,7 +59,7 @@
         }
       },
       "timeLeft": 0,
-      "timer": 28,
+      "timer": 31,
       "currentTaskId": "id-8z9w9mlm0cx"
     }
   ]

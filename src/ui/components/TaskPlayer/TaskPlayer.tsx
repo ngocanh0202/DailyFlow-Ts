@@ -6,6 +6,7 @@ import { MdSkipNext } from 'react-icons/md';
 import { LuGamepad2 } from "react-icons/lu";
 import { TaskStatus } from '~/enums/TaskStatus.Type.enum';
 import myGif from '~/ui/assets/BocchiKitaGIF.gif';
+import myGif2 from '~/ui/assets/BocchiKitaGIF2.gif';
 
 interface TaskPlayerProps {
   task: Task;
@@ -60,7 +61,7 @@ const TaskPlayer = ({
       <div className="card primary flex flex-col gap-3 justify-center items-center mt-3" style={{ padding: '1rem 1.5rem' }}>
         <p className='font-bold'>Congratulations! You've completed the task.</p>
         <img 
-          src={myGif} 
+          src={task.isTaskBreak ? myGif2 : myGif } 
           alt="Task completed" 
           className="w-100 h-70 object-contain"
         />
