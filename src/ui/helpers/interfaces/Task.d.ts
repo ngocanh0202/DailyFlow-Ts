@@ -7,16 +7,12 @@ interface Task {
   status: TaskStatus;
   isTaskBreak?: boolean;
   subTasks: SubTask[];
+  scheduledDate?: string;
+  lastNotifiedDate?: string;
 }
 
 interface SubTask{
   id: string;
   title: string;
   completed: boolean;
-}
-
-interface TaskCart {
-  tasks: { [id: string]: Task };
-  taskIds: string[];
-  taskIdsInCart?: string[];
 }
