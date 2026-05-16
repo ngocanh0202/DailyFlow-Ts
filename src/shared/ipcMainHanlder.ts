@@ -6,6 +6,7 @@ import {
   closeWindow, 
   closeWindowsByType, 
   createWindow, 
+  createScheduleEditorWindow,
   focusWindow, 
   getAllWindows, 
   GetCurrentPosition, 
@@ -16,6 +17,7 @@ import {
 } from './util.window.js';
 import { IpcMainName } from '../enums/IpcMain.Name.enum.js';
 import { getIconPath } from '../pathResolver.js';
+import { requestAiProvider, type AiProviderRequest } from './aiProvider.js';
 let store: any = new Store({ name: 'settings' });
 export const setupIpcMainHandlers = () => {
   ipcMain.handle(IpcMainName.SET_WINDOW_ALWAYS_ON_TOP, async (event, windowId: string, isAlwaysOnTop: boolean) => {
@@ -29,6 +31,21 @@ export const setupIpcMainHandlers = () => {
 
   ipcMain.handle(IpcMainName.CREATE_WINDOW, async (event, windowType) => {
     return createWindow(windowType);
+  });
+
+  ipcMain.handle(IpcMainName.OPEN_SCHEDULE_EDITOR_WINDOW, async (event, payload) => {
+    return await createScheduleEditorWindow(payload);
+  });
+
+  ipcMain.handle(IpcMainName.COMPLETE_SCHEDULE_EDITOR, async (event, payload) => {
+    const mainWindow = windows.get('main')?.window;
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send(IpcMainName.COMPLETE_SCHEDULE_EDITOR, payload);
+      mainWindow.show();
+      mainWindow.focus();
+    }
+    closeWindow('schedule-editor');
+    return true;
   });
 
   ipcMain.handle(IpcMainName.LOAD_WINDOW_CONFIGS, async () => {
@@ -364,6 +381,15 @@ export const setupIpcMainHandlers = () => {
     } catch (error) {
       console.error('Notification error:', error);
       return false;
+    }
+  });
+
+  ipcMain.handle(IpcMainName.AI_REQUEST, async (event, payload: AiProviderRequest) => {
+    try {
+      return await requestAiProvider(payload);
+    } catch (error) {
+      console.error('AI request error:', error);
+      throw error;
     }
   });
 

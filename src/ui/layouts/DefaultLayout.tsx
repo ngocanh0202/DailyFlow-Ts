@@ -1,17 +1,17 @@
 import { ReactNode, useContext} from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { ThemeContext } from '../App';
 import { 
   IoSettingsOutline, 
   IoMoonOutline, 
   IoSunnyOutline, 
-  IoHomeOutline  
+  IoHomeOutline,
+  IoListOutline,
+  IoBarChartOutline,
+  IoSparklesOutline
 } from "react-icons/io5";
 import { RiShutDownLine } from "react-icons/ri";
-import { FaTasks } from "react-icons/fa";
 import './DefaultLayout.css';
-import { useAppDispatch } from '../store/hooks';
-import { initializeTodoFlow } from '../store/todo/todoSlice';
 import { useAlert } from '../helpers/hooks/useAlert';
 
 interface DefaultLayoutProps {
@@ -20,28 +20,39 @@ interface DefaultLayoutProps {
 
 const DefaultLayout = ({ children }: DefaultLayoutProps) => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { isDarkTheme, toggleTheme } = useContext(ThemeContext);
-  const dispatch = useAppDispatch();
   const { 
       ask, 
   } = useAlert();
+
+  const navClass = (path: string, primary = false) => {
+    const isActive =
+      path === '/dashboard'
+        ? location.pathname === '/' || location.pathname === '/dashboard'
+        : location.pathname === path;
+    return `btn ${primary ? 'btn-primary h-[32px]' : 'btn-icon'} ${isActive ? 'active' : ''}`;
+  };
 
   return (
     <div className="layout-container">
       <nav className="drag-area sidebar">
         <div className="nav-top">
-          <button className="btn btn-icon" onClick={() => navigate('/dashboard')}>
+          <button className={navClass('/dashboard')} title="Dashboard" onClick={() => navigate('/dashboard')}>
             <IoHomeOutline />
           </button>
-          <button className="btn btn-primary h-[25px]" onClick={() => {
-            dispatch(initializeTodoFlow({ id: '' }));
-            navigate('/todoflow')
-          }}>
-            <FaTasks />
+          <button className={navClass('/manage')} title="Manage TodoFlow" onClick={() => navigate('/manage')}>
+            <IoListOutline />
+          </button>
+          <button className={navClass('/analytics')} title="Analytics" onClick={() => navigate('/analytics')}>
+            <IoBarChartOutline />
+          </button>
+          <button className={navClass('/ai')} title="AI" onClick={() => navigate('/ai')}>
+            <IoSparklesOutline />
           </button>
         </div>
         <div className="nav-bottom">
-          <button className="btn btn-icon" onClick={() => navigate('/setting')}>
+          <button className={navClass('/setting')} onClick={() => navigate('/setting')}>
             <IoSettingsOutline />
           </button>
           <button className="btn btn-icon" onClick={toggleTheme}>

@@ -1,6 +1,8 @@
 export enum IpcMainName {
     SET_WINDOW_ALWAYS_ON_TOP = 'set-window-always-on-top',
     CREATE_WINDOW = 'create-window',
+    OPEN_SCHEDULE_EDITOR_WINDOW = 'open-schedule-editor-window',
+    COMPLETE_SCHEDULE_EDITOR = 'complete-schedule-editor',
     LOAD_WINDOW_CONFIGS = 'load-window-configs',
     CLOSE_WINDOW = 'close-window',
     CLOSE_WINDOWS_BY_TYPE = 'close-windows-by-type',
@@ -33,6 +35,7 @@ export enum IpcMainName {
     SMOOTH_RESIZE_AND_MOVE = 'smooth-resize-and-move',
     SYSTEM_ALERT = 'system-alert',
     SYSTEM_NOTIFICATION = 'system-notification',
+    AI_REQUEST = 'ai-request',
     APP_CLOSE = 'app-close',
     APP_MINIMIZE = 'app-minimize'
 }

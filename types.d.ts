@@ -2,6 +2,9 @@ interface Window {
   electronAPI: {
     // Window operations
     createWindow: (windowType: string) => Promise<void>;
+    openScheduleEditorWindow: (payload: { dateKeys: string[]; todoId?: string }) => Promise<void>;
+    completeScheduleEditor: (payload: { todo: TodoFlow; mode: 'create' | 'edit' }) => Promise<void>;
+    onScheduleEditorCompleted: (callback: (payload: { todo: TodoFlow; mode: 'create' | 'edit' }) => void) => () => void;
     closeWindow: (windowId: string) => Promise<void>;
     closeWindowsByType: (windowType: string) => Promise<void>;
     closeAllExceptMain: () => Promise<void>;
@@ -46,6 +49,12 @@ interface Window {
         body: string;
         icon?: string;
     }) => Promise<boolean>;
+    aiRequest: (payload: {
+        provider: 'openai' | 'anthropic' | 'gemini';
+        model: string;
+        apiKey: string;
+        prompt: string;
+    }) => Promise<string>;
     // App settings
     getSettings: () => Promise<AppSettings>;
     saveSettings: (settings: AppSettings) => Promise<void>;
