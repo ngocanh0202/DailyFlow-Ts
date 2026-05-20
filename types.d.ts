@@ -5,6 +5,9 @@ interface Window {
     openScheduleEditorWindow: (payload: ScheduleEditorOpenPayload) => Promise<void>;
     completeScheduleEditor: (payload: ScheduleEditorCompletePayload) => Promise<void>;
     onScheduleEditorCompleted: (callback: (payload: ScheduleEditorCompletePayload) => void) => () => void;
+    openTodoTimeEditorWindow: (payload: TodoTimeEditorOpenPayload) => Promise<void>;
+    completeTodoTimeEditor: (payload: TodoTimeEditorCompletePayload) => Promise<void>;
+    onTodoTimeEditorCompleted: (callback: (payload: TodoTimeEditorCompletePayload) => void) => () => void;
     closeWindow: (windowId: string) => Promise<void>;
     closeWindowsByType: (windowType: string) => Promise<void>;
     closeAllExceptMain: () => Promise<void>;
@@ -28,6 +31,8 @@ interface Window {
     todoRemove: (id: string) => Promise<void>;
     todoClear: () => Promise<void>;
     todoReset: () => Promise<void>;
+    todoArchiveGetAll: () => Promise<ArchivedTodoSummary[]>;
+    todoArchiveClear: () => Promise<void>;
     // Get user screen size
     getUserScreenSize: () => Promise<{ width: number; height: number }>;
     // Window configuration access
@@ -117,4 +122,40 @@ interface ScheduleEditorCompletePayload {
   mode: 'create' | 'edit';
   returnTo?: string | null;
   activeDateKey?: string | null;
+}
+
+interface TodoTimeEditorOpenPayload {
+  todoId: string;
+  returnTo?: string;
+  activeDateKey?: string;
+}
+
+interface TodoTimeEditorCompletePayload {
+  todo: TodoFlow;
+  returnTo?: string | null;
+  activeDateKey?: string | null;
+}
+
+interface ArchivedTodoTaskSummary {
+  taskId: string;
+  title: string;
+  status: string;
+  completed: boolean;
+  estimatedTime: number;
+  actualTime: number;
+  timeRatio: number;
+}
+
+interface ArchivedTodoSummary {
+  id: string;
+  todoId: string;
+  note: string;
+  removedDateKeys: string[];
+  archivedAt: string;
+  scheduleSlots: ScheduleSlot[];
+  totalEstimatedTime: number;
+  totalActualTime: number;
+  taskCompleted: number;
+  taskTotal: number;
+  tasks: ArchivedTodoTaskSummary[];
 }

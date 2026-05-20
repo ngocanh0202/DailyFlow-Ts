@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import todoReducer, { setChangeCurrentTask, setStartTimer, setStopTimer, setTimeLeft, setTodoStatus } from './todoSlice';
+import todoReducer, {
+  insertNewTaskRelativeToTask,
+  moveTaskById,
+  removeTask,
+  setChangeCurrentTask,
+  setStartTimer,
+  setStopTimer,
+  setTimeLeft,
+  setTodoStatus,
+} from './todoSlice';
 import { TaskStatus } from '~/enums/TaskStatus.Type.enum';
 import { TodoStatus } from '~/enums/TodoStatus.Type.enum';
 
@@ -121,5 +130,36 @@ describe('todoSlice timer ticks', () => {
     expect(next.currentTaskId).toBe('task-2');
     expect(next.tasks['done-task'].status).toBe(TaskStatus.COMPLETED);
     expect(next.tasks['task-1'].status).toBe(TaskStatus.PAUSED);
+  });
+
+  it('inserts a new task above the target task id even when completed tasks are hidden in the UI', () => {
+    const previous = {
+      ...buildTodoWithMixedTasks(),
+      estimatedTimeTodo: 180,
+    };
+
+    const next = todoReducer(previous, insertNewTaskRelativeToTask({ taskId: 'task-2', position: 'above' }));
+    const newTaskId = next.taskIds.find((taskId) => !previous.taskIds.includes(taskId));
+
+    expect(newTaskId).toBeTruthy();
+    expect(next.taskIds).toEqual(['done-task', 'task-1', newTaskId, 'task-2']);
+    expect(next.estimatedTimeTodo).toBe(180);
+  });
+
+  it('moves a task by id without relying on the visible list index', () => {
+    const previous = buildTodoWithMixedTasks();
+
+    const next = todoReducer(previous, moveTaskById({ taskId: 'task-2', direction: 'up' }));
+
+    expect(next.taskIds).toEqual(['done-task', 'task-2', 'task-1']);
+  });
+
+  it('clears the current task when removing that task', () => {
+    const next = todoReducer(buildRunningTodo(), removeTask('task-1'));
+
+    expect(next.currentTaskId).toBeUndefined();
+    expect(next.timeLeft).toBe(0);
+    expect(next.taskIds).toEqual([]);
+    expect(next.taskTotal).toBe(0);
   });
 });

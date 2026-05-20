@@ -5,6 +5,8 @@ enum IpcMainName {
     CREATE_WINDOW = 'create-window',
     OPEN_SCHEDULE_EDITOR_WINDOW = 'open-schedule-editor-window',
     COMPLETE_SCHEDULE_EDITOR = 'complete-schedule-editor',
+    OPEN_TODO_TIME_EDITOR_WINDOW = 'open-todo-time-editor-window',
+    COMPLETE_TODO_TIME_EDITOR = 'complete-todo-time-editor',
     LOAD_WINDOW_CONFIGS = 'load-window-configs',
     CLOSE_WINDOW = 'close-window',
     CLOSE_WINDOWS_BY_TYPE = 'close-windows-by-type',
@@ -26,6 +28,8 @@ enum IpcMainName {
     TODO_REMOVE = 'todo-remove',
     TODO_CLEAR = 'todo-clear',
     TODO_RESET = 'todo-reset',
+    TODO_ARCHIVE_GET_ALL = 'todo-archive-get-all',
+    TODO_ARCHIVE_CLEAR = 'todo-archive-clear',
     GET_USER_SCREEN_SIZE = 'get-user-screen-size',
     GET_WINDOW_SIZES = 'get-window-sizes',
     GET_WINDOW_SIZE = 'get-window-size',
@@ -54,6 +58,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
         const listener = (_event: any, payload: any) => callback(payload);
         ipcRenderer.on(IpcMainName.COMPLETE_SCHEDULE_EDITOR, listener);
         return () => ipcRenderer.removeListener(IpcMainName.COMPLETE_SCHEDULE_EDITOR, listener);
+    },
+    openTodoTimeEditorWindow: (payload: any) =>
+        ipcRenderer.invoke(IpcMainName.OPEN_TODO_TIME_EDITOR_WINDOW, payload),
+    completeTodoTimeEditor: (payload: any) =>
+        ipcRenderer.invoke(IpcMainName.COMPLETE_TODO_TIME_EDITOR, payload),
+    onTodoTimeEditorCompleted: (callback: (payload: any) => void) => {
+        const listener = (_event: any, payload: any) => callback(payload);
+        ipcRenderer.on(IpcMainName.COMPLETE_TODO_TIME_EDITOR, listener);
+        return () => ipcRenderer.removeListener(IpcMainName.COMPLETE_TODO_TIME_EDITOR, listener);
     },
     closeWindow: (windowId : string) => 
         ipcRenderer.invoke(IpcMainName.CLOSE_WINDOW, windowId),
@@ -99,6 +112,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
         ipcRenderer.invoke(IpcMainName.TODO_CLEAR),
     todoReset: () => 
         ipcRenderer.invoke(IpcMainName.TODO_RESET),
+    todoArchiveGetAll: () =>
+        ipcRenderer.invoke(IpcMainName.TODO_ARCHIVE_GET_ALL),
+    todoArchiveClear: () =>
+        ipcRenderer.invoke(IpcMainName.TODO_ARCHIVE_CLEAR),
     // Get user screen size
     getUserScreenSize: () => 
         ipcRenderer.invoke(IpcMainName.GET_USER_SCREEN_SIZE),

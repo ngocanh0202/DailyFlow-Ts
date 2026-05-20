@@ -7,7 +7,7 @@ import { MdTimer } from "react-icons/md";
 import { IoMdCloseCircleOutline } from "react-icons/io";
 import { formatTime, generateId, parseTime } from "~/ui/helpers/utils/utils";
 import { useAppSelector, useAppDispatch } from "~/ui/store/hooks";
-import { insertNewTaskAtCurrentPosition, removeTask, reorderTasks, updateTask } from "~/ui/store/todo/todoSlice";
+import { insertNewTaskRelativeToTask, moveTaskById, removeTask, updateTask } from "~/ui/store/todo/todoSlice";
 import { CgInsertAfterR, CgInsertBeforeR } from "react-icons/cg";
 import './Task.css';
 
@@ -183,8 +183,8 @@ const Task = ({ taskId, index, triggerValidation = false}: TaskProps) => {
     dispatch(removeTask(taskId));
   }
 
-  const handleOrderTask = (fromIndex: number, toIndex: number) => {
-    dispatch(reorderTasks({ fromIndex, toIndex }));
+  const handleOrderTask = (taskId: string, direction: 'up' | 'down') => {
+    dispatch(moveTaskById({ taskId, direction }));
   }
 
   return (
@@ -207,17 +207,17 @@ const Task = ({ taskId, index, triggerValidation = false}: TaskProps) => {
         <div className="relative flex items-center group">
           <button className="btn ">...</button>
           <div className="absolute right-[-5px] top-[-10px] context-menu hidden group-hover:block">
-            <div className="context-menu-item" onClick={() => handleOrderTask(index, index - 1)}>
+            <div className="context-menu-item" onClick={() => handleOrderTask(taskId, 'up')}>
               <i><FaCaretUp /></i> Move up
             </div>
-            <div className="context-menu-item" onClick={() => handleOrderTask(index, index + 1)}>
+            <div className="context-menu-item" onClick={() => handleOrderTask(taskId, 'down')}>
               <i><FaCaretDown /></i> Move down
             </div>
             <div className="flex">
               <button
                 className="context-menu-item flex-1"
                 onClick={() => {
-                  dispatch(insertNewTaskAtCurrentPosition({index, isDown: false}));
+                  dispatch(insertNewTaskRelativeToTask({ taskId, position: 'above' }));
                 }}
               >
                 <CgInsertAfterR /> <span className="whitespace-nowrap">Add above</span>
@@ -225,7 +225,7 @@ const Task = ({ taskId, index, triggerValidation = false}: TaskProps) => {
               <button
                 className="context-menu-item flex-1 items-center justify-between"
                 onClick={() => {
-                  dispatch(insertNewTaskAtCurrentPosition({index, isDown: true}));
+                  dispatch(insertNewTaskRelativeToTask({ taskId, position: 'below' }));
                 }}
               >
                 <CgInsertBeforeR /> <span className="whitespace-nowrap">Add below</span> 

@@ -1,0 +1,67 @@
+.settings-panel .settings-panel-row,
+.settings-panel .settings-panel-block {
+  border-bottom: 1px solid var(--border-color);
+  padding: 1rem 0;
+}
+
+.settings-panel .settings-panel-row {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+}
+
+.settings-panel .settings-panel-row.no-border {
+  border-bottom: 0;
+}
+
+.settings-panel p {
+  color: var(--text-secondary);
+}
+
+.settings-panel-toggle {
+  align-items: center;
+  cursor: pointer;
+  display: inline-flex;
+  margin-left: 1rem;
+  position: relative;
+}
+
+.settings-panel-switch {
+  background: #4b5563;
+  border-radius: 999px;
+  height: 1.75rem;
+  position: relative;
+  transition: background 0.2s ease;
+  width: 3.5rem;
+}
+
+.settings-panel-switch::after {
+  background: #ffffff;
+  border-radius: 999px;
+  content: '';
+  height: 1.5rem;
+  left: 0.25rem;
+  position: absolute;
+  top: 0.125rem;
+  transition: transform 0.2s ease;
+  width: 1.5rem;
+}
+
+.peer:checked + .settings-panel-switch {
+  background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+}
+
+.peer:checked + .settings-panel-switch::after {
+  transform: translateX(1.75rem);
+}
+
+.settings-panel-switch.disabled {
+  background: #9ca3af;
+  cursor: not-allowed;
+}
+
+.settings-panel-volume {
+  align-items: center;
+  display: flex;
+  gap: 1rem;
+}

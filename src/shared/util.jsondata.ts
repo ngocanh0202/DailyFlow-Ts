@@ -136,6 +136,10 @@ export const todoStore = new JsonStore({
   filePath: getPathLocalData('todo.json')
 });
 
+export const todoArchiveStore = new JsonStore({
+  filePath: getPathLocalData('todoArchive.json')
+});
+
 export const windowConfig = new JsonStore({
   filePath: getPathLocalData('windowConfig.json')
 });

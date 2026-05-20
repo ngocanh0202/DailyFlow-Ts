@@ -8,6 +8,7 @@ import Analytics from './Pages/Analytics/Analytics';
 import AiFlow from './Pages/AiFlow/AiFlow';
 import Settings from './Pages/Setting/Settings';
 import TodoflowSettings from './Pages/TodoflowSettings/TodoflowSettings';
+import TodoTimeEditor from './Pages/TodoTimeEditor/TodoTimeEditor';
 import DefaultLayout from './layouts/DefaultLayout';
 import Todoflow from './Pages/Todoflow/Todoflow';
 import ScheduleEditor from './Pages/ScheduleEditor/ScheduleEditor';
@@ -116,6 +117,7 @@ function App() {
             <Route path="/setting" element={<DefaultLayout><Settings /></DefaultLayout>} />
             <Route path="/todoflow" element={<DefaultLayout><Todoflow /></DefaultLayout>} />
             <Route path="/todoflow-setting" element={<DefaultLayout><TodoflowSettings /></DefaultLayout>} />
+            <Route path="/todoflow-time-editor" element={<TodoTimeEditor />} />
             <Route path="/ontask" element={<DefaultLayout><OnTask /></DefaultLayout>} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

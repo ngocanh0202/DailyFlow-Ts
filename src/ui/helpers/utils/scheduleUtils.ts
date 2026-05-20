@@ -90,11 +90,32 @@ function buildTodoFlowContext(todos: TodoFlow[], tasks: Task[], todayKey: string
   ].join('\n');
 }
 
+function buildArchivedTodoFlowContext(archivedTodos: ArchivedTodoSummary[] = []): string {
+  const archiveLines = archivedTodos.slice(0, 12).map((todo) => {
+    const taskLines = todo.tasks.slice(0, 8).map((task) => {
+      const ratio = Math.round((task.timeRatio || 0) * 100);
+      return `  - Task: ${task.title || 'Untitled'} | status: ${task.status} | completed: ${task.completed ? 'yes' : 'no'} | planned: ${formatSecondsForPrompt(task.estimatedTime || 0)} | actual: ${formatSecondsForPrompt(task.actualTime || 0)} | ratio: ${ratio}%`;
+    });
+    const slotText = todo.scheduleSlots.length > 0 ? formatScheduleSlotChipLabels(todo.scheduleSlots).join(' | ') : 'No slots';
+    return [
+      `- Archived TodoFlow: ${todo.note || 'Untitled'} | removed dates: ${formatDateKeyList(todo.removedDateKeys, 'unknown')} | slots: ${slotText} | tasks: ${todo.taskCompleted}/${todo.taskTotal} | planned: ${formatSecondsForPrompt(todo.totalEstimatedTime || 0)} | actual: ${formatSecondsForPrompt(todo.totalActualTime || 0)}`,
+      taskLines.length > 0 ? taskLines.join('\n') : '  - No tasks',
+    ].join('\n');
+  });
+
+  return [
+    '',
+    'Archived TodoFlows:',
+    archiveLines.length > 0 ? archiveLines.join('\n') : '- None',
+  ].join('\n');
+}
+
 export function createAiTodoFlowAnalysisPrompt(
   todos: TodoFlow[],
   tasks: Task[],
   userRequest: string,
-  todayKey = toDateKey(new Date())
+  todayKey = toDateKey(new Date()),
+  archivedTodos: ArchivedTodoSummary[] = []
 ): string {
   return [
     'You are an AI productivity analyst for a TodoFlow app.',
@@ -105,6 +126,7 @@ export function createAiTodoFlowAnalysisPrompt(
     '',
     'TodoFlow data:',
     buildTodoFlowContext(todos, tasks, todayKey),
+    buildArchivedTodoFlowContext(archivedTodos),
   ].join('\n');
 }
 
@@ -747,6 +769,118 @@ export function redistributeTaskEstimateWithinTodo(
     tasks,
     taskTotal: nonBreakTaskIds.length,
     estimatedTimeTodo: nextTotal,
+  };
+}
+
+export function addTaskWithProportionalEstimate(todo: TodoFlow, task: Task): TodoFlow {
+  if (task.isTaskBreak) {
+    return {
+      ...todo,
+      tasks: { ...todo.tasks, [task.id]: task },
+      taskIds: [...todo.taskIds, task.id],
+      taskTotal: todo.taskIds.filter((id) => {
+        const item = todo.tasks[id];
+        return item && !item.isTaskBreak;
+      }).length,
+    };
+  }
+
+  const nonBreakTaskIds = todo.taskIds.filter((id) => {
+    const item = todo.tasks[id];
+    return item && !item.isTaskBreak;
+  });
+  const todoTotal = Math.max(0, Math.floor(todo.estimatedTimeTodo || getTodoTaskEstimatedSeconds(todo)));
+  const currentEstimates = nonBreakTaskIds.map((id) => Math.max(0, Math.floor(todo.tasks[id]?.estimatedTime || 0)));
+  const newTaskEstimate = todoTotal > 0 && currentEstimates.length > 0 ? Math.min(...currentEstimates) : Math.max(0, Math.floor(task.estimatedTime || 0));
+  const remainingEstimate = Math.max(0, todoTotal - newTaskEstimate);
+  const distributedExistingEstimates = distributeSecondsByCurrentWeights(remainingEstimate, nonBreakTaskIds, todo.tasks);
+  const tasks: Record<string, Task> = {
+    ...todo.tasks,
+    [task.id]: {
+      ...task,
+      estimatedTime: newTaskEstimate,
+    },
+  };
+
+  for (const id of nonBreakTaskIds) {
+    tasks[id] = {
+      ...tasks[id],
+      estimatedTime: distributedExistingEstimates[id] || 0,
+    };
+  }
+
+  const taskIds = [...todo.taskIds, task.id];
+
+  return {
+    ...todo,
+    tasks,
+    taskIds,
+    taskTotal: nonBreakTaskIds.length + 1,
+    estimatedTimeTodo: todoTotal,
+  };
+}
+
+export function resizeTaskAllocationBoundary(
+  todo: TodoFlow,
+  previousTaskId: string,
+  nextTaskId: string,
+  deltaSeconds: number
+): TodoFlow {
+  const previousTask = todo.tasks[previousTaskId];
+  const nextTask = todo.tasks[nextTaskId];
+  if (!previousTask || !nextTask || previousTask.isTaskBreak || nextTask.isTaskBreak) {
+    return todo;
+  }
+
+  const previousEstimate = Math.max(0, Math.floor(previousTask.estimatedTime || 0));
+  const nextEstimate = Math.max(0, Math.floor(nextTask.estimatedTime || 0));
+  const pairTotal = previousEstimate + nextEstimate;
+  const nextPreviousEstimate = Math.max(0, Math.min(pairTotal, previousEstimate + Math.floor(deltaSeconds)));
+  const nextNextEstimate = pairTotal - nextPreviousEstimate;
+
+  return {
+    ...todo,
+    tasks: {
+      ...todo.tasks,
+      [previousTaskId]: {
+        ...previousTask,
+        estimatedTime: nextPreviousEstimate,
+      },
+      [nextTaskId]: {
+        ...nextTask,
+        estimatedTime: nextNextEstimate,
+      },
+    },
+  };
+}
+
+export function resizeTaskAllocationBoundaryFromDrag(
+  todo: TodoFlow,
+  previousTaskId: string,
+  nextTaskId: string,
+  drag: { startY: number; currentY: number; totalSeconds: number; laneHeight: number }
+): TodoFlow {
+  const safeLaneHeight = Math.max(1, drag.laneHeight);
+  const safeTotalSeconds = Math.max(1, drag.totalSeconds);
+  const deltaSeconds = Math.round(((drag.currentY - drag.startY) / safeLaneHeight) * safeTotalSeconds);
+  return resizeTaskAllocationBoundary(todo, previousTaskId, nextTaskId, deltaSeconds);
+}
+
+export function reorderTodoTaskIds(todo: TodoFlow, fromIndex: number, toIndex: number): TodoFlow {
+  const taskIds = [...todo.taskIds];
+  if (fromIndex < 0 || fromIndex >= taskIds.length || toIndex < 0 || toIndex >= taskIds.length) {
+    return todo;
+  }
+  if (fromIndex === toIndex) {
+    return todo;
+  }
+
+  const [movedTaskId] = taskIds.splice(fromIndex, 1);
+  taskIds.splice(toIndex, 0, movedTaskId);
+
+  return {
+    ...todo,
+    taskIds,
   };
 }
 

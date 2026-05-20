@@ -1,5 +1,5 @@
 import { app, ipcMain, screen, dialog, Notification, nativeImage } from 'electron';
-import { taskStore, todoStore } from './util.jsondata.js';
+import { taskStore, todoArchiveStore, todoStore } from './util.jsondata.js';
 import Store from 'electron-store';
 import { 
   closeAllExceptMain, 
@@ -7,6 +7,7 @@ import {
   closeWindowsByType, 
   createWindow, 
   createScheduleEditorWindow,
+  createTodoTimeEditorWindow,
   focusWindow, 
   getAllWindows, 
   GetCurrentPosition, 
@@ -46,6 +47,21 @@ export const setupIpcMainHandlers = () => {
       mainWindow.focus();
     }
     closeWindow('schedule-editor');
+    return true;
+  });
+
+  ipcMain.handle(IpcMainName.OPEN_TODO_TIME_EDITOR_WINDOW, async (event, payload) => {
+    return await createTodoTimeEditorWindow(payload);
+  });
+
+  ipcMain.handle(IpcMainName.COMPLETE_TODO_TIME_EDITOR, async (event, payload) => {
+    const mainWindow = windows.get('main')?.window;
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send(IpcMainName.COMPLETE_TODO_TIME_EDITOR, payload);
+      mainWindow.show();
+      mainWindow.focus();
+    }
+    closeWindow('todo-time-editor');
     return true;
   });
 
@@ -121,8 +137,12 @@ export const setupIpcMainHandlers = () => {
 
   ipcMain.handle(IpcMainName.TODO_GET_ALL, async () => {
     const allTodos = await todoStore.getAll();
-    const { activeTodos, expiredTodos } = splitExpiredAssignedTodos(allTodos);
-    if (expiredTodos.length > 0) {
+    const { activeTodos, expiredTodos, archivedSummaries } = splitExpiredAssignedTodos(allTodos);
+    if (archivedSummaries.length > 0) {
+      const existingArchives = await todoArchiveStore.getAll();
+      await todoArchiveStore.writeAll({ items: [...existingArchives, ...archivedSummaries] });
+    }
+    if (expiredTodos.length > 0 || archivedSummaries.length > 0) {
       await todoStore.writeAll({ items: activeTodos });
     }
     return activeTodos;
@@ -163,6 +183,14 @@ export const setupIpcMainHandlers = () => {
       
       await todoStore.update(todo.id, todo);
     }
+  });
+
+  ipcMain.handle(IpcMainName.TODO_ARCHIVE_GET_ALL, async () => {
+    return await todoArchiveStore.getAll();
+  });
+
+  ipcMain.handle(IpcMainName.TODO_ARCHIVE_CLEAR, async () => {
+    return await todoArchiveStore.clear();
   });
 
   // Screen and Window Information
@@ -260,6 +288,7 @@ export const setupIpcMainHandlers = () => {
       
       await taskStore.clear();
       await todoStore.clear();
+      await todoArchiveStore.clear();
       return true;
     } catch (err) {
       console.error('delete-all-data error:', err);

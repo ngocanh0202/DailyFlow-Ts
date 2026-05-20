@@ -11,7 +11,7 @@ const ScheduleEditorCompletionListener = () => {
   const { askInApp } = useAlert();
 
   useEffect(() => {
-    return window.electronAPI.onScheduleEditorCompleted(async ({ todo, mode, returnTo, activeDateKey }) => {
+    const removeScheduleListener = window.electronAPI.onScheduleEditorCompleted(async ({ todo, mode, returnTo, activeDateKey }) => {
       dispatch(setTodo(todo));
       if (returnTo) {
         navigate(returnTo, { state: { activeDateKey } });
@@ -34,6 +34,16 @@ const ScheduleEditorCompletionListener = () => {
 
       navigate('/dashboard');
     });
+
+    const removeTodoTimeListener = window.electronAPI.onTodoTimeEditorCompleted(({ todo, returnTo, activeDateKey }) => {
+      dispatch(setTodo(todo));
+      navigate(returnTo || '/todoflow-setting', { state: { activeDateKey } });
+    });
+
+    return () => {
+      removeScheduleListener();
+      removeTodoTimeListener();
+    };
   }, [askInApp, dispatch, navigate]);
 
   return null;

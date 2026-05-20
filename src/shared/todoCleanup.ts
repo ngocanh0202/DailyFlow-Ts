@@ -1,5 +1,3 @@
-const MONTHS_TO_KEEP_ASSIGNED_TODOS = 1;
-
 function toDateKey(date: Date): string {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -7,11 +5,28 @@ function toDateKey(date: Date): string {
   return `${year}-${month}-${day}`;
 }
 
-export function getAssignedTodoCutoffDateKey(now = new Date()): string {
-  const targetMonth = now.getMonth() - MONTHS_TO_KEEP_ASSIGNED_TODOS;
-  const lastDayOfTargetMonth = new Date(now.getFullYear(), targetMonth + 1, 0).getDate();
-  const cutoffDay = Math.min(now.getDate(), lastDayOfTargetMonth);
-  return toDateKey(new Date(now.getFullYear(), targetMonth, cutoffDay));
+export interface ArchivedTodoTaskSummary {
+  taskId: string;
+  title: string;
+  status: string;
+  completed: boolean;
+  estimatedTime: number;
+  actualTime: number;
+  timeRatio: number;
+}
+
+export interface ArchivedTodoSummary {
+  id: string;
+  todoId: string;
+  note: string;
+  removedDateKeys: string[];
+  archivedAt: string;
+  scheduleSlots: Array<{ dateKey: string; startTime: string; endTime: string }>;
+  totalEstimatedTime: number;
+  totalActualTime: number;
+  taskCompleted: number;
+  taskTotal: number;
+  tasks: ArchivedTodoTaskSummary[];
 }
 
 export function getTodoAssignedDateKeys(todo: any): string[] {
@@ -45,18 +60,97 @@ export function isAssignedTodoOlderThanCutoff(todo: any, cutoffDateKey: string):
   return assignedDateKeys.length > 0 && assignedDateKeys.every((dateKey) => dateKey < cutoffDateKey);
 }
 
-export function splitExpiredAssignedTodos<T>(todos: T[], now = new Date()): { activeTodos: T[]; expiredTodos: T[] } {
-  const cutoffDateKey = getAssignedTodoCutoffDateKey(now);
+function uniqueSorted(values: string[]): string[] {
+  return Array.from(new Set(values)).sort();
+}
+
+function getTodoScheduleSlots(todo: any): Array<{ dateKey: string; startTime: string; endTime: string }> {
+  return Array.isArray(todo?.scheduleSlots)
+    ? todo.scheduleSlots.filter((slot: any) => typeof slot?.dateKey === 'string')
+    : [];
+}
+
+function applyActiveDateKeys<T>(todo: T, activeDateKeys: string[]): T {
+  const activeKeySet = new Set(activeDateKeys);
+  const scheduleSlots = getTodoScheduleSlots(todo).filter((slot) => activeKeySet.has(slot.dateKey));
+  const nextTodo: any = {
+    ...(todo as any),
+    scheduledDate: activeDateKeys[0],
+    scheduledDates: activeDateKeys.length > 1 ? activeDateKeys : undefined,
+    scheduleSlots: scheduleSlots.length > 0 ? scheduleSlots : undefined,
+    lastNotifiedDate: undefined,
+  };
+
+  return nextTodo;
+}
+
+export function buildArchivedTodoSummary(todo: any, removedDateKeys: string[], now = new Date()): ArchivedTodoSummary {
+  const totalEstimatedTime = Math.max(0, Math.floor(todo?.estimatedTimeTodo || 0));
+  const tasks = Array.isArray(todo?.taskIds)
+    ? todo.taskIds
+        .map((taskId: string) => todo?.tasks?.[taskId])
+        .filter(Boolean)
+        .filter((task: any) => !task.isTaskBreak)
+        .map((task: any) => {
+          const estimatedTime = Math.max(0, Math.floor(task.estimatedTime || 0));
+          return {
+            taskId: task.id,
+            title: task.title || 'Untitled',
+            status: task.status || 'Not Started',
+            completed: task.status === 'Completed',
+            estimatedTime,
+            actualTime: Math.max(0, Math.floor(task.actualTime || 0)),
+            timeRatio: totalEstimatedTime > 0 ? estimatedTime / totalEstimatedTime : 0,
+          };
+        })
+    : [];
+  const removedDateKeySet = new Set(removedDateKeys);
+
+  return {
+    id: `${todo?.id || 'todo'}-${removedDateKeys.join('-')}-${now.getTime()}`,
+    todoId: todo?.id || '',
+    note: todo?.note || '',
+    removedDateKeys: uniqueSorted(removedDateKeys),
+    archivedAt: now.toISOString(),
+    scheduleSlots: getTodoScheduleSlots(todo).filter((slot) => removedDateKeySet.has(slot.dateKey)),
+    totalEstimatedTime,
+    totalActualTime: Math.max(0, Math.floor(todo?.actualTimeTodo || 0)),
+    taskCompleted: Math.max(0, Math.floor(todo?.taskCompleted || 0)),
+    taskTotal: Math.max(0, Math.floor(todo?.taskTotal || tasks.length)),
+    tasks,
+  };
+}
+
+export function splitExpiredAssignedTodos<T>(
+  todos: T[],
+  now = new Date()
+): { activeTodos: T[]; expiredTodos: T[]; archivedSummaries: ArchivedTodoSummary[] } {
+  const todayKey = toDateKey(now);
   const activeTodos: T[] = [];
   const expiredTodos: T[] = [];
+  const archivedSummaries: ArchivedTodoSummary[] = [];
 
   todos.forEach((todo) => {
-    if (isAssignedTodoOlderThanCutoff(todo, cutoffDateKey)) {
+    const assignedDateKeys = getTodoAssignedDateKeys(todo);
+    if (assignedDateKeys.length === 0) {
+      activeTodos.push(todo);
+      return;
+    }
+
+    const expiredDateKeys = assignedDateKeys.filter((dateKey) => dateKey < todayKey);
+    const activeDateKeys = assignedDateKeys.filter((dateKey) => dateKey >= todayKey);
+
+    if (expiredDateKeys.length > 0) {
+      archivedSummaries.push(buildArchivedTodoSummary(todo, expiredDateKeys, now));
+    }
+
+    if (activeDateKeys.length === 0) {
       expiredTodos.push(todo);
       return;
     }
-    activeTodos.push(todo);
+
+    activeTodos.push(expiredDateKeys.length > 0 ? applyActiveDateKeys(todo, activeDateKeys) : todo);
   });
 
-  return { activeTodos, expiredTodos };
+  return { activeTodos, expiredTodos, archivedSummaries };
 }

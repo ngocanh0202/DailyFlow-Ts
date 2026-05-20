@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { IoArrowBackOutline, IoCalendarOutline, IoGitBranchOutline, IoSaveOutline } from 'react-icons/io5';
+import { IoArrowBackOutline, IoCalendarOutline, IoGitBranchOutline, IoPieChartOutline, IoSaveOutline } from 'react-icons/io5';
 import { PageType } from '~/enums/PageType.enum';
 import DateChipList from '~/ui/components/DateChipList/DateChipList';
+import SettingsPanel, { type SettingsPanelHandle } from '~/ui/components/SettingsPanel/SettingsPanel';
 import { useAlert } from '~/ui/helpers/hooks/useAlert';
 import { useResizePage } from '~/ui/helpers/hooks/useResizePage';
 import { formatTime, generateId, parseTime } from '~/ui/helpers/utils/utils';
@@ -37,6 +38,7 @@ const TodoflowSettings = () => {
   const dispatch = useAppDispatch();
   const todoFlow = useAppSelector((state) => state.todoflow);
   const { info } = useAlert();
+  const settingsPanelRef = useRef<SettingsPanelHandle>(null);
   const routeState = location.state as { activeDateKey?: string } | null;
   const [actualTimeInputValue, setActualTimeInputValue] = useState('');
   const [estimatedTimeInputValue, setEstimatedTimeInputValue] = useState('');
@@ -106,6 +108,18 @@ const TodoflowSettings = () => {
     });
   };
 
+  const openTodoTimeEditor = async () => {
+    if (!todoFlow.id) {
+      info('Save the TodoFlow before editing time allocation.');
+      return;
+    }
+    await window.electronAPI.openTodoTimeEditorWindow({
+      todoId: todoFlow.id,
+      returnTo: '/todoflow-setting',
+      activeDateKey,
+    });
+  };
+
   const assignedDateKeys = getTodoScheduleDateKeys(todoFlow);
   const todayKey = toDateKey(new Date());
   const activeDateKey =
@@ -144,6 +158,11 @@ const TodoflowSettings = () => {
     }
   };
 
+  const handleDone = async () => {
+    await settingsPanelRef.current?.saveSettings();
+    navigate('/todoflow');
+  };
+
   return (
     <div className="todoflow-settings-page">
       <header className="todoflow-settings-header">
@@ -165,6 +184,10 @@ const TodoflowSettings = () => {
         <DateChipList labels={slotLabels} emptyText="No time slots" className="todoflow-settings-slots" />
         <button className="btn btn-secondary todoflow-settings-action" onClick={openScheduleEditor}>
           Edit Schedule
+        </button>
+        <button className="btn btn-secondary todoflow-settings-action" onClick={openTodoTimeEditor}>
+          <IoPieChartOutline />
+          Edit Time Allocation
         </button>
         {canDetachTodoFlow && (
           <button className="btn btn-secondary todoflow-settings-action todoflow-settings-detach" onClick={handleDetachTodoFlow}>
@@ -220,7 +243,9 @@ const TodoflowSettings = () => {
         </div>
       </section>
 
-      <button className="btn btn-primary todoflow-settings-save" onClick={() => navigate('/todoflow')}>
+      <SettingsPanel ref={settingsPanelRef} hideStartWithWindows hideSaveButton showSuccessMessage={false} />
+
+      <button className="btn btn-primary todoflow-settings-save" onClick={handleDone}>
         <IoSaveOutline />
         Done
       </button>

@@ -60,6 +60,7 @@ function loadAiConfig(): AiConfig {
 const AiFlow = () => {
   const [todos, setTodos] = useState<TodoFlow[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [archivedTodos, setArchivedTodos] = useState<ArchivedTodoSummary[]>([]);
   const [config, setConfig] = useState<AiConfig>(() => loadAiConfig());
   const [analysisPrompt, setAnalysisPrompt] = useState('');
   const [draftPrompt, setDraftPrompt] = useState('');
@@ -69,12 +70,14 @@ const AiFlow = () => {
   useResizePage(PageType.MAIN);
 
   const fetchItems = async () => {
-    const [allTodos, allTasks]: [TodoFlow[], Task[]] = await Promise.all([
+    const [allTodos, allTasks, allArchivedTodos]: [TodoFlow[], Task[], ArchivedTodoSummary[]] = await Promise.all([
       window.electronAPI.todoGetAll(),
       window.electronAPI.taskGetAll(),
+      window.electronAPI.todoArchiveGetAll(),
     ]);
     setTodos(allTodos.map(withoutRuntimeTimer));
     setTasks(allTasks);
+    setArchivedTodos(allArchivedTodos);
   };
 
   useEffect(() => {
@@ -117,7 +120,7 @@ const AiFlow = () => {
   };
 
   const analyzeTodoFlow = async () => {
-    await runAiRequest(createAiTodoFlowAnalysisPrompt(todos, tasks, analysisPrompt), 'Analyzing TodoFlow data...');
+    await runAiRequest(createAiTodoFlowAnalysisPrompt(todos, tasks, analysisPrompt, undefined, archivedTodos), 'Analyzing TodoFlow data...');
   };
 
   const createTodoFlowDraft = async () => {

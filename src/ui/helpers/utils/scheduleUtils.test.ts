@@ -10,6 +10,7 @@ import {
   createTodoFlowFromTask,
   createAiTodoFlowPrompt,
   createAiTodoFlowAnalysisPrompt,
+  addTaskWithProportionalEstimate,
   filterManageItems,
   formatDateChipLabels,
   formatDateChipItems,
@@ -36,6 +37,9 @@ import {
   splitTodoFlowForDate,
   resetTodoFlowProgress,
   redistributeTaskEstimateWithinTodo,
+  reorderTodoTaskIds,
+  resizeTaskAllocationBoundary,
+  resizeTaskAllocationBoundaryFromDrag,
   secondsBetweenTimeStrings,
   setTaskScheduleSlot,
   setTodoAssignedDate,
@@ -430,6 +434,45 @@ describe('scheduleUtils', () => {
     expect(prompt).toContain('Email');
   });
 
+  it('includes archived TodoFlow summaries in the AI analysis prompt', () => {
+    const prompt = createAiTodoFlowAnalysisPrompt(
+      [],
+      [],
+      'Analyze history',
+      '2026-05-18',
+      [
+        {
+          id: 'archive-1',
+          todoId: 'todo-1',
+          note: 'Past plan',
+          removedDateKeys: ['2026-05-17'],
+          archivedAt: '2026-05-18T10:00:00.000Z',
+          scheduleSlots: [{ dateKey: '2026-05-17', startTime: '09:00', endTime: '10:00' }],
+          totalEstimatedTime: 3600,
+          totalActualTime: 4200,
+          taskCompleted: 1,
+          taskTotal: 2,
+          tasks: [
+            {
+              taskId: 'task-1',
+              title: 'Done task',
+              status: 'Completed',
+              completed: true,
+              estimatedTime: 1800,
+              actualTime: 2100,
+              timeRatio: 0.5,
+            },
+          ],
+        },
+      ]
+    );
+
+    expect(prompt).toContain('Archived TodoFlows:');
+    expect(prompt).toContain('Past plan');
+    expect(prompt).toContain('Done task');
+    expect(prompt).toContain('ratio: 50%');
+  });
+
   it('creates an AI TodoFlow creation prompt from user request and current data', () => {
     const prompt = createAiTodoFlowPrompt(
       [todo('todo-1', 'Existing plan', '2026-05-13')],
@@ -625,6 +668,44 @@ describe('scheduleUtils', () => {
     expect(getTodoTaskEstimatedSeconds(updated)).toBe(3600);
   });
 
+  it('adds a task using the lowest current task estimate and preserves the TodoFlow total', () => {
+    const source = {
+      ...todo('todo-1', 'Plan'),
+      estimatedTimeTodo: 600,
+      taskIds: ['task-1', 'task-2', 'task-3'],
+      tasks: {
+        'task-1': { ...task('task-1', 'First'), estimatedTime: 300 },
+        'task-2': { ...task('task-2', 'Second'), estimatedTime: 200 },
+        'task-3': { ...task('task-3', 'Third'), estimatedTime: 100 },
+      },
+    };
+
+    const updated = addTaskWithProportionalEstimate(source, {
+      ...task('task-4', 'Fourth'),
+      estimatedTime: 0,
+    });
+
+    expect(updated.taskIds).toEqual(['task-1', 'task-2', 'task-3', 'task-4']);
+    expect(updated.tasks['task-4'].estimatedTime).toBe(100);
+    expect(updated.tasks['task-1'].estimatedTime).toBe(250);
+    expect(updated.tasks['task-2'].estimatedTime).toBe(167);
+    expect(updated.tasks['task-3'].estimatedTime).toBe(83);
+    expect(updated.estimatedTimeTodo).toBe(600);
+    expect(getTodoTaskEstimatedSeconds(updated)).toBe(600);
+  });
+
+  it('keeps zero-estimate TodoFlows stable when adding the first task', () => {
+    const updated = addTaskWithProportionalEstimate(
+      { ...todo('todo-1', 'Plan'), estimatedTimeTodo: 0 },
+      { ...task('task-1', 'First'), estimatedTime: 0 }
+    );
+
+    expect(updated.taskIds).toEqual(['task-1']);
+    expect(updated.tasks['task-1'].estimatedTime).toBe(0);
+    expect(updated.estimatedTimeTodo).toBe(0);
+    expect(updated.taskTotal).toBe(1);
+  });
+
   it('redistributes remaining task estimates when one task estimate decreases', () => {
     const updated = redistributeTaskEstimateWithinTodo(
       {
@@ -668,6 +749,101 @@ describe('scheduleUtils', () => {
     expect(updated.tasks['task-2'].estimatedTime).toBe(1800);
     expect(updated.tasks['break-1'].estimatedTime).toBe(300);
     expect(getTodoTaskEstimatedSeconds(updated)).toBe(3600);
+  });
+
+  it('resizes the boundary between adjacent tasks while preserving the total estimate', () => {
+    const updated = resizeTaskAllocationBoundary(
+      {
+        ...todo('todo-1', 'Plan'),
+        estimatedTimeTodo: 3600,
+        taskIds: ['task-1', 'task-2', 'task-3'],
+        tasks: {
+          'task-1': { ...task('task-1', 'First'), estimatedTime: 1200 },
+          'task-2': { ...task('task-2', 'Second'), estimatedTime: 1200 },
+          'task-3': { ...task('task-3', 'Third'), estimatedTime: 1200 },
+        },
+      },
+      'task-1',
+      'task-2',
+      300
+    );
+
+    expect(updated.tasks['task-1'].estimatedTime).toBe(1500);
+    expect(updated.tasks['task-2'].estimatedTime).toBe(900);
+    expect(updated.tasks['task-3'].estimatedTime).toBe(1200);
+    expect(getTodoTaskEstimatedSeconds(updated)).toBe(3600);
+  });
+
+  it('prevents boundary resizing from creating negative task estimates', () => {
+    const updated = resizeTaskAllocationBoundary(
+      {
+        ...todo('todo-1', 'Plan'),
+        estimatedTimeTodo: 1800,
+        taskIds: ['task-1', 'task-2'],
+        tasks: {
+          'task-1': { ...task('task-1', 'First'), estimatedTime: 600 },
+          'task-2': { ...task('task-2', 'Second'), estimatedTime: 1200 },
+        },
+      },
+      'task-1',
+      'task-2',
+      1800
+    );
+
+    expect(updated.tasks['task-1'].estimatedTime).toBe(1800);
+    expect(updated.tasks['task-2'].estimatedTime).toBe(0);
+    expect(getTodoTaskEstimatedSeconds(updated)).toBe(1800);
+  });
+
+  it('calculates repeated boundary drag moves from the original snapshot instead of compounding deltas', () => {
+    const source = {
+      ...todo('todo-1', 'Plan'),
+      estimatedTimeTodo: 2000,
+      taskIds: ['task-1', 'task-2'],
+      tasks: {
+        'task-1': { ...task('task-1', 'First'), estimatedTime: 1000 },
+        'task-2': { ...task('task-2', 'Second'), estimatedTime: 1000 },
+      },
+    };
+
+    const firstMove = resizeTaskAllocationBoundaryFromDrag(source, 'task-1', 'task-2', {
+      startY: 100,
+      currentY: 150,
+      totalSeconds: 2000,
+      laneHeight: 200,
+    });
+    const repeatedMove = resizeTaskAllocationBoundaryFromDrag(source, 'task-1', 'task-2', {
+      startY: 100,
+      currentY: 150,
+      totalSeconds: 2000,
+      laneHeight: 200,
+    });
+
+    expect(firstMove.tasks['task-1'].estimatedTime).toBe(1500);
+    expect(firstMove.tasks['task-2'].estimatedTime).toBe(500);
+    expect(repeatedMove.tasks['task-1'].estimatedTime).toBe(1500);
+    expect(repeatedMove.tasks['task-2'].estimatedTime).toBe(500);
+  });
+
+  it('reorders TodoFlow task ids without changing task estimates', () => {
+    const updated = reorderTodoTaskIds(
+      {
+        ...todo('todo-1', 'Plan'),
+        taskIds: ['task-1', 'task-2', 'task-3'],
+        tasks: {
+          'task-1': { ...task('task-1', 'First'), estimatedTime: 600 },
+          'task-2': { ...task('task-2', 'Second'), estimatedTime: 1200 },
+          'task-3': { ...task('task-3', 'Third'), estimatedTime: 1800 },
+        },
+      },
+      2,
+      0
+    );
+
+    expect(updated.taskIds).toEqual(['task-3', 'task-1', 'task-2']);
+    expect(updated.tasks['task-1'].estimatedTime).toBe(600);
+    expect(updated.tasks['task-2'].estimatedTime).toBe(1200);
+    expect(updated.tasks['task-3'].estimatedTime).toBe(1800);
   });
 
   it('extends a TodoFlow schedule duration without overlapping another TodoFlow that day', () => {
