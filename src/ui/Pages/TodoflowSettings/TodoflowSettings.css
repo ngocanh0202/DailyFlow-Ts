@@ -89,6 +89,93 @@
   gap: 8px;
 }
 
+.todoflow-settings-calendar {
+  margin-top: 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--bg-primary);
+  padding: 10px;
+}
+
+.todoflow-settings-calendar-header,
+.todoflow-settings-calendar-actions {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.todoflow-settings-calendar-header strong {
+  color: var(--text-primary);
+  font-size: 0.88rem;
+  text-align: center;
+}
+
+.todoflow-settings-weekdays,
+.todoflow-settings-month-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.todoflow-settings-weekdays {
+  margin: 10px 0 6px;
+}
+
+.todoflow-settings-weekdays span {
+  color: var(--text-secondary);
+  font-size: 0.68rem;
+  font-weight: 800;
+  text-align: center;
+}
+
+.todoflow-settings-day {
+  aspect-ratio: 1;
+  min-width: 0;
+  border: 1px solid var(--border-color);
+  border-radius: 7px;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.todoflow-settings-day.muted {
+  color: var(--text-secondary);
+  opacity: 0.65;
+}
+
+.todoflow-settings-day.today {
+  border-color: var(--accent-primary);
+}
+
+.todoflow-settings-day.selected {
+  background: var(--accent-primary);
+  border-color: var(--accent-primary);
+  color: var(--bg-primary);
+}
+
+.todoflow-settings-day:disabled {
+  cursor: not-allowed;
+  opacity: 0.35;
+}
+
+.todoflow-settings-calendar-actions {
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  margin-top: 10px;
+}
+
+.todoflow-settings-calendar-actions span {
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.todoflow-settings-calendar-actions .btn {
+  height: 30px;
+  padding: 0 10px;
+}
+
 .todoflow-settings-detach {
   border-color: color-mix(in srgb, var(--accent-primary) 55%, var(--border-color));
 }

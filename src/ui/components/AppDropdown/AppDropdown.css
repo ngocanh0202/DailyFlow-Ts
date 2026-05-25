@@ -63,3 +63,8 @@
   color: var(--text-primary);
   background: var(--bg-tertiary);
 }
+
+.app-dropdown-option:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}

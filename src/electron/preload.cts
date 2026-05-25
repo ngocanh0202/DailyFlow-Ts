@@ -30,6 +30,10 @@ enum IpcMainName {
     TODO_RESET = 'todo-reset',
     TODO_ARCHIVE_GET_ALL = 'todo-archive-get-all',
     TODO_ARCHIVE_CLEAR = 'todo-archive-clear',
+    AI_ANALYSIS_HISTORY_GET_ALL = 'ai-analysis-history-get-all',
+    AI_ANALYSIS_HISTORY_UPSERT = 'ai-analysis-history-upsert',
+    AI_ANALYSIS_HISTORY_REMOVE = 'ai-analysis-history-remove',
+    AI_ANALYSIS_HISTORY_CLEAR = 'ai-analysis-history-clear',
     GET_USER_SCREEN_SIZE = 'get-user-screen-size',
     GET_WINDOW_SIZES = 'get-window-sizes',
     GET_WINDOW_SIZE = 'get-window-size',
@@ -116,6 +120,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
         ipcRenderer.invoke(IpcMainName.TODO_ARCHIVE_GET_ALL),
     todoArchiveClear: () =>
         ipcRenderer.invoke(IpcMainName.TODO_ARCHIVE_CLEAR),
+    aiAnalysisHistoryGetAll: () =>
+        ipcRenderer.invoke(IpcMainName.AI_ANALYSIS_HISTORY_GET_ALL),
+    aiAnalysisHistoryUpsert: (entry: any) =>
+        ipcRenderer.invoke(IpcMainName.AI_ANALYSIS_HISTORY_UPSERT, entry),
+    aiAnalysisHistoryRemove: (id: string) =>
+        ipcRenderer.invoke(IpcMainName.AI_ANALYSIS_HISTORY_REMOVE, id),
+    aiAnalysisHistoryClear: () =>
+        ipcRenderer.invoke(IpcMainName.AI_ANALYSIS_HISTORY_CLEAR),
     // Get user screen size
     getUserScreenSize: () => 
         ipcRenderer.invoke(IpcMainName.GET_USER_SCREEN_SIZE),
@@ -151,10 +163,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
         icon?: string;
     }) => ipcRenderer.invoke(IpcMainName.SYSTEM_NOTIFICATION, options),
     aiRequest: (payload: {
-        provider: 'openai' | 'anthropic' | 'gemini';
+        provider: 'openai' | 'anthropic' | 'gemini' | 'custom';
         model: string;
         apiKey: string;
         prompt: string;
+        customUrl?: string;
     }) => ipcRenderer.invoke(IpcMainName.AI_REQUEST, payload),
     // App settings
     getSettings: () => ipcRenderer.invoke(IpcMainName.GET_SETTINGS),

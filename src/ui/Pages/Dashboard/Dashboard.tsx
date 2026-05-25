@@ -1,4 +1,4 @@
-import { type WheelEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import './Dashboard.css';
 import { PageType } from '~/enums/PageType.enum';
 import { useAppDispatch, useAppSelector } from '~/ui/store/hooks';
@@ -22,6 +22,7 @@ import {
   toDateKey,
 } from '~/ui/helpers/utils/scheduleUtils';
 import DateChipList from '~/ui/components/DateChipList/DateChipList';
+import { useAlert } from '~/ui/helpers/hooks/useAlert';
 
 const withoutRuntimeTimer = (todo: TodoFlow): TodoFlow => ({ ...todo, timer: null });
 const AUTO_SCROLL_EDGE = 48;
@@ -59,6 +60,7 @@ const Dashboard = () => {
   const dispatch = useAppDispatch();
   const activeTodoFlow = useAppSelector((state) => state.todoflow);
   const navigate = useNavigate();
+  const { notify } = useAlert();
   const dayMenuRef = useRef<HTMLDivElement | null>(null);
   const calendarLayoutRef = useRef<HTMLDivElement | null>(null);
   const calendarMainRef = useRef<HTMLElement | null>(null);
@@ -189,10 +191,10 @@ const Dashboard = () => {
         : getDueNotificationItems(unslottedTodos, [], todayKey);
 
       for (const due of dueItems) {
-        await window.electronAPI.systemNotification({
-          title: 'TodoFlow starts soon',
-          body: isDueSlotNotification(due) ? `${due.title} starts at ${due.slot.startTime}` : due.title,
-        });
+        await notify(
+          'TodoFlow starts soon',
+          isDueSlotNotification(due) ? `${due.title} starts at ${due.slot.startTime}` : due.title
+        );
 
         if (due.type === 'todo') {
           const updated = withoutRuntimeTimer({ ...due.item, lastNotifiedDate: isDueSlotNotification(due) ? due.notificationKey : todayKey });
@@ -216,6 +218,25 @@ const Dashboard = () => {
       return startOfWeek(next);
     });
   };
+
+  useEffect(() => {
+    const calendarMain = calendarMainRef.current;
+    if (!calendarMain) return;
+
+    const handleCalendarWheel = (event: WheelEvent) => {
+      if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
+
+      event.preventDefault();
+      const now = Date.now();
+      if (now - lastWheelMonthSwitchRef.current < MONTH_SWITCH_COOLDOWN_MS) return;
+
+      lastWheelMonthSwitchRef.current = now;
+      moveVisibleRows(event.deltaY > 0 ? 1 : -1);
+    };
+
+    calendarMain.addEventListener('wheel', handleCalendarWheel, { passive: false });
+    return () => calendarMain.removeEventListener('wheel', handleCalendarWheel);
+  }, []);
 
   const moveVisibleRowsWithSelection = (offset: number) => {
     setVisibleStartDate((current) => {
@@ -253,17 +274,6 @@ const Dashboard = () => {
     setSelectedDateKeys([dateKey]);
     setRangeStartDateKey(dateKey);
     setDayMenu(null);
-  };
-
-  const handleCalendarWheel = (event: WheelEvent<HTMLElement>) => {
-    if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
-
-    event.preventDefault();
-    const now = Date.now();
-    if (now - lastWheelMonthSwitchRef.current < MONTH_SWITCH_COOLDOWN_MS) return;
-
-    lastWheelMonthSwitchRef.current = now;
-    moveVisibleRows(event.deltaY > 0 ? 1 : -1);
   };
 
   const openDayMenu = (target: HTMLButtonElement, dateKey: string) => {
@@ -393,7 +403,7 @@ const Dashboard = () => {
 
         </aside>
 
-        <section className="dashboard-calendar-main" ref={calendarMainRef} onWheel={handleCalendarWheel}>
+        <section className="dashboard-calendar-main" ref={calendarMainRef}>
           <div className="dashboard-calendar-shell">
           <div className="dashboard-weekdays">
             {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (

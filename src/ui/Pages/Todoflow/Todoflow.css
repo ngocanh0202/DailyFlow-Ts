@@ -10,14 +10,94 @@
 
 .todoflow-header {
   flex: 0 0 auto;
-  gap: 8px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-rows: auto auto;
+  align-items: center;
+  column-gap: 8px;
+  row-gap: 8px;
   max-width: 100%;
   min-width: 0;
   overflow-x: hidden;
 }
 
-.todoflow-note-area {
+.todoflow-title-group {
+  display: contents;
+}
+
+.todoflow-nav-button {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.todoflow-title-copy {
+  display: contents;
+}
+
+.todoflow-title-copy > p.drag-area {
+  display: none;
+}
+
+.todoflow-title-meta {
+  grid-column: 2;
+  grid-row: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
   min-width: 0;
+  min-height: 22px;
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  line-height: 1;
+}
+
+.todoflow-title-meta span:last-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.todoflow-entry-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  border: 1px solid var(--border-color);
+  border-radius: 999px;
+  padding: 0 8px;
+  color: var(--text-secondary);
+  font-weight: 700;
+}
+
+.todoflow-entry-badge.saved {
+  border-color: color-mix(in srgb, #38a169 45%, var(--border-color));
+  color: #38a169;
+}
+
+.todoflow-entry-badge.draft {
+  border-color: color-mix(in srgb, var(--accent-primary) 45%, var(--border-color));
+  color: var(--accent-primary);
+}
+
+.todoflow-note-area {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  min-width: 0;
+}
+
+.todoflow-note-input {
+  width: 100%;
+  min-height: 38px;
+  font-weight: 700;
+}
+
+.todoflow-header-actions {
+  grid-column: 3;
+  grid-row: 1;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  justify-self: end;
 }
 
 .todoflow-progress-card {
@@ -26,6 +106,49 @@
   min-width: 0;
   overflow-x: hidden;
   padding: 0.85rem;
+  margin-top: 0.75rem;
+}
+
+.todoflow-progress-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.todoflow-metric {
+  min-width: 0;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--bg-primary);
+  padding: 8px;
+}
+
+.todoflow-metric span,
+.todoflow-metric strong {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.todoflow-metric span {
+  color: var(--text-secondary);
+  font-size: 0.74rem;
+  line-height: 1;
+}
+
+.todoflow-metric strong {
+  margin-top: 4px;
+  color: var(--text-primary);
+  font-size: 0.96rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.todoflow-progress-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .todoflow-action-row,
@@ -33,6 +156,34 @@
   flex: 0 0 auto;
   max-width: 100%;
   min-width: 0;
+}
+
+.todoflow-action-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 0.75rem;
+}
+
+.todoflow-start-button {
+  width: 100%;
+  height: 38px;
+  font-weight: 700;
+}
+
+.todoflow-add-task {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  height: 34px;
+  margin-top: 0.75rem;
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.todoflow-add-task svg {
+  font-size: 1.2rem;
 }
 
 .todoflow-task-list {
@@ -52,6 +203,27 @@
 
 .todoflow-task-list .card:first-child {
   margin-top: 0;
+}
+
+@media (max-width: 720px) {
+  .todoflow-header {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+
+  .todoflow-note-area {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+
+  .todoflow-header-actions {
+    grid-column: 3;
+    grid-row: 1;
+    justify-content: flex-end;
+  }
+
+  .todoflow-progress-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-height: 720px) {

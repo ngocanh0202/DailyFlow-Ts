@@ -10,13 +10,17 @@ import { formatTime, generateId, parseTime } from '~/ui/helpers/utils/utils';
 import { useAppDispatch, useAppSelector } from '~/ui/store/hooks';
 import { setTodo } from '~/ui/store/todo/todoSlice';
 import {
+  buildMonthDays,
   formatDateChipLabels,
   formatScheduleSlotChipLabels,
   getTodoScheduleDateKeys,
   getTodoTaskEstimatedSeconds,
+  isPastDateKey,
+  listDateKeysBetween,
   resizeTodoFlowScheduleDuration,
   splitTodoFlowForDate,
   syncTodoTaskEstimatesWithDuration,
+  toggleDateKeySelection,
   toDateKey,
 } from '~/ui/helpers/utils/scheduleUtils';
 import './TodoflowSettings.css';
@@ -43,6 +47,10 @@ const TodoflowSettings = () => {
   const [actualTimeInputValue, setActualTimeInputValue] = useState('');
   const [estimatedTimeInputValue, setEstimatedTimeInputValue] = useState('');
   const [timeError, setTimeError] = useState('');
+  const [isAssigningDates, setIsAssigningDates] = useState(false);
+  const [visibleMonthDate, setVisibleMonthDate] = useState(() => new Date());
+  const [selectedAssignDateKeys, setSelectedAssignDateKeys] = useState<string[]>([]);
+  const [rangeStartDateKey, setRangeStartDateKey] = useState(() => toDateKey(new Date()));
 
   useResizePage(PageType.TODOFLOW, 'left');
 
@@ -50,6 +58,23 @@ const TodoflowSettings = () => {
     setActualTimeInputValue(formatTime(todoFlow.actualTimeTodo || 0));
     setEstimatedTimeInputValue(formatTime(todoFlow.estimatedTimeTodo || 0));
   }, [todoFlow.actualTimeTodo, todoFlow.estimatedTimeTodo]);
+
+  const assignedDateKeys = getTodoScheduleDateKeys(todoFlow);
+  const todayKey = toDateKey(new Date());
+  const assignCalendarDays = buildMonthDays(visibleMonthDate);
+  const activeDateKey =
+    routeState?.activeDateKey && assignedDateKeys.includes(routeState.activeDateKey)
+      ? routeState.activeDateKey
+      : assignedDateKeys.includes(todayKey)
+        ? todayKey
+        : assignedDateKeys[0];
+  const canDetachTodoFlow = assignedDateKeys.length > 1 && Boolean(activeDateKey);
+  const slotLabels = formatScheduleSlotChipLabels(todoFlow.scheduleSlots || []);
+
+  useEffect(() => {
+    setSelectedAssignDateKeys(assignedDateKeys.filter((dateKey) => !isPastDateKey(dateKey)));
+    setRangeStartDateKey(assignedDateKeys.find((dateKey) => !isPastDateKey(dateKey)) || todayKey);
+  }, [assignedDateKeys.join('|'), todayKey]);
 
   const persistTodoFlow = async (todo: TodoFlow) => {
     const persistableTodo = withoutRuntimeTimer(todo);
@@ -100,6 +125,16 @@ const TodoflowSettings = () => {
       info('Save the TodoFlow before editing schedule.');
       return;
     }
+
+    if (assignedDateKeys.length === 0) {
+      setSelectedAssignDateKeys([]);
+      setRangeStartDateKey(todayKey);
+      setVisibleMonthDate(new Date());
+      setIsAssigningDates((current) => !current);
+      return;
+    }
+
+    await persistTodoFlow(todoFlow);
     await window.electronAPI.openScheduleEditorWindow({
       todoId: todoFlow.id,
       dateKeys: getTodoScheduleDateKeys(todoFlow),
@@ -120,16 +155,51 @@ const TodoflowSettings = () => {
     });
   };
 
-  const assignedDateKeys = getTodoScheduleDateKeys(todoFlow);
-  const todayKey = toDateKey(new Date());
-  const activeDateKey =
-    routeState?.activeDateKey && assignedDateKeys.includes(routeState.activeDateKey)
-      ? routeState.activeDateKey
-      : assignedDateKeys.includes(todayKey)
-        ? todayKey
-        : assignedDateKeys[0];
-  const canDetachTodoFlow = assignedDateKeys.length > 1 && Boolean(activeDateKey);
-  const slotLabels = formatScheduleSlotChipLabels(todoFlow.scheduleSlots || []);
+  const moveAssignCalendar = (offset: number) => {
+    setVisibleMonthDate((current) => {
+      const next = new Date(current);
+      next.setMonth(next.getMonth() + offset);
+      return next;
+    });
+  };
+
+  const selectAssignDate = (dateKey: string) => {
+    if (isPastDateKey(dateKey)) return;
+    setSelectedAssignDateKeys([dateKey]);
+    setRangeStartDateKey(dateKey);
+  };
+
+  const selectAssignDateRange = (dateKey: string) => {
+    if (isPastDateKey(dateKey)) return;
+    const nextRange = listDateKeysBetween(rangeStartDateKey, dateKey).filter((key) => !isPastDateKey(key));
+    setSelectedAssignDateKeys(nextRange);
+  };
+
+  const toggleAssignDate = (dateKey: string) => {
+    if (isPastDateKey(dateKey)) return;
+    setSelectedAssignDateKeys((current) => toggleDateKeySelection(current, dateKey).filter((key) => !isPastDateKey(key)));
+    setRangeStartDateKey(dateKey);
+  };
+
+  const saveAssignedDates = async () => {
+    if (!todoFlow.id) {
+      info('Save the TodoFlow before assigning dates.');
+      return;
+    }
+    if (selectedAssignDateKeys.length === 0) {
+      info('Select at least one date.');
+      return;
+    }
+
+    setIsAssigningDates(false);
+    await persistTodoFlow(todoFlow);
+    await window.electronAPI.openScheduleEditorWindow({
+      todoId: todoFlow.id,
+      dateKeys: selectedAssignDateKeys,
+      returnTo: '/todoflow-setting',
+      activeDateKey: selectedAssignDateKeys[0],
+    });
+  };
 
   const handleDetachTodoFlow = async () => {
     if (!activeDateKey) return;
@@ -183,8 +253,64 @@ const TodoflowSettings = () => {
         <DateChipList labels={formatDateChipLabels(assignedDateKeys)} emptyText="No assigned days" />
         <DateChipList labels={slotLabels} emptyText="No time slots" className="todoflow-settings-slots" />
         <button className="btn btn-secondary todoflow-settings-action" onClick={openScheduleEditor}>
-          Edit Schedule
+          {assignedDateKeys.length === 0 ? 'Assign Date' : 'Edit Schedule'}
         </button>
+        {isAssigningDates && (
+          <div className="todoflow-settings-calendar">
+            <div className="todoflow-settings-calendar-header">
+              <button className="btn btn-secondary" onClick={() => moveAssignCalendar(-1)}>
+                Prev
+              </button>
+              <strong>{visibleMonthDate.toLocaleString('default', { month: 'long', year: 'numeric' })}</strong>
+              <button className="btn btn-secondary" onClick={() => moveAssignCalendar(1)}>
+                Next
+              </button>
+            </div>
+            <div className="todoflow-settings-weekdays">
+              {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (
+                <span key={day}>{day}</span>
+              ))}
+            </div>
+            <div className="todoflow-settings-month-grid">
+              {assignCalendarDays.map((day) => {
+                const dateKey = day.dateKey;
+                const isPastDay = isPastDateKey(dateKey);
+                const isSelected = selectedAssignDateKeys.includes(dateKey);
+                return (
+                  <button
+                    key={dateKey}
+                    className={`todoflow-settings-day ${day.isCurrentMonth ? '' : 'muted'} ${day.isToday ? 'today' : ''} ${
+                      isSelected ? 'selected' : ''
+                    }`}
+                    disabled={isPastDay}
+                    onClick={(event) => {
+                      if (event.shiftKey) {
+                        selectAssignDateRange(dateKey);
+                        return;
+                      }
+                      if (event.ctrlKey || event.metaKey) {
+                        toggleAssignDate(dateKey);
+                        return;
+                      }
+                      selectAssignDate(dateKey);
+                    }}
+                  >
+                    {day.dayOfMonth}
+                  </button>
+                );
+              })}
+            </div>
+            <div className="todoflow-settings-calendar-actions">
+              <span>{selectedAssignDateKeys.length} selected</span>
+              <button className="btn btn-secondary" onClick={() => setIsAssigningDates(false)}>
+                Cancel
+              </button>
+              <button className="btn btn-primary" onClick={saveAssignedDates}>
+                Assign
+              </button>
+            </div>
+          </div>
+        )}
         <button className="btn btn-secondary todoflow-settings-action" onClick={openTodoTimeEditor}>
           <IoPieChartOutline />
           Edit Time Allocation

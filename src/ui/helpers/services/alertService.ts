@@ -26,37 +26,27 @@ class AlertService {
 
 
   async showSystemAlert(options: AlertOptions): Promise<AlertResult> {
-    try {
-      const systemType = options.type === 'success' ? 'info' : options.type;
-      
-      const result = await window.electronAPI.systemAlert({
-        type: systemType,
-        title: options.title,
-        message: options.message,
-        buttons: options.buttons
-      });
-      return result;
-    } catch (error) {
-      console.error('System alert error:', error);
-      return { response: 0, checkboxChecked: false };
+    if (options.type === AlertType.QUESTION) {
+      return this.askInApp(options.message, options.title, options.buttons);
     }
+
+    return new Promise((resolve) => {
+      this.showUIAlert(options, () => {
+        resolve({ response: 0, checkboxChecked: false });
+      });
+    });
   }
 
   async showSystemNotification(options: NotificationOptions): Promise<boolean> {
-    try {
-      if (
-        typeof window === 'undefined' ||
-        !window.electronAPI ||
-        typeof window.electronAPI.systemNotification !== 'function'
-      ) {
-        console.error('System notification API is not available');
-        return false;
-      }
-      return await window.electronAPI.systemNotification(options);
-    } catch (error) {
-      console.error('System notification error:', error);
-      return false;
-    }
+    this.showUIAlert(
+      {
+        type: AlertType.INFO,
+        title: options.title,
+        message: options.body,
+      },
+      () => {}
+    );
+    return true;
   }
 
   showUIAlert(options: AlertOptions, onClose: (result?: AlertResult) => void): string {
@@ -85,8 +75,8 @@ class AlertService {
   }
 
   async showAlert(options: AlertOptions): Promise<AlertResult | string> {
-    if (options.useSystemAlert || options.type === 'error' || options.type === 'question') {
-      return await this.showSystemAlert(options);
+    if (options.type === AlertType.QUESTION) {
+      return this.askInApp(options.message, options.title, options.buttons);
     }
     
     return new Promise((resolve) => {
@@ -109,25 +99,23 @@ class AlertService {
   }
 
   async error(message: string, title = 'Error'): Promise<AlertResult | string> {
-    return this.showAlert({ type: AlertType.ERROR, title, message, useSystemAlert: true });
+    return this.showAlert({ type: AlertType.ERROR, title, message });
   }
 
   async confirm(message: string, title = 'Confirm'): Promise<AlertResult> {
-    return this.showSystemAlert({
-      type: AlertType.QUESTION,
-      title,
+    return this.askInApp(
       message,
-      buttons: ['Yes', 'No']
-    });
+      title,
+      ['Yes', 'No']
+    );
   }
 
   async ask(message: string, title = 'Question', buttons = ['OK', 'Cancel']): Promise<AlertResult> {
-    return this.showSystemAlert({
-      type: AlertType.QUESTION,
-      title,
+    return this.askInApp(
       message,
+      title,
       buttons
-    });
+    );
   }
 
   async askInApp(message: string, title = 'Question', buttons = ['OK', 'Cancel']): Promise<AlertResult> {
@@ -168,18 +156,16 @@ class AlertService {
 
 export const alertService = new AlertService();
 
-export const {
-  showSystemAlert,
-  showSystemNotification,
-  showUIAlert,
-  closeUIAlert,
-  showAlert,
-  info,
-  success,
-  warning,
-  error,
-  confirm,
-  ask,
-  askInApp,
-  notify
-} = alertService;
+export const showSystemAlert = alertService.showSystemAlert.bind(alertService);
+export const showSystemNotification = alertService.showSystemNotification.bind(alertService);
+export const showUIAlert = alertService.showUIAlert.bind(alertService);
+export const closeUIAlert = alertService.closeUIAlert.bind(alertService);
+export const showAlert = alertService.showAlert.bind(alertService);
+export const info = alertService.info.bind(alertService);
+export const success = alertService.success.bind(alertService);
+export const warning = alertService.warning.bind(alertService);
+export const error = alertService.error.bind(alertService);
+export const confirm = alertService.confirm.bind(alertService);
+export const ask = alertService.ask.bind(alertService);
+export const askInApp = alertService.askInApp.bind(alertService);
+export const notify = alertService.notify.bind(alertService);

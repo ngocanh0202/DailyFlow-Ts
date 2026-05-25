@@ -140,6 +140,10 @@ export const todoArchiveStore = new JsonStore({
   filePath: getPathLocalData('todoArchive.json')
 });
 
+export const aiAnalysisHistoryStore = new JsonStore({
+  filePath: getPathLocalData('aiAnalysisHistory.json')
+});
+
 export const windowConfig = new JsonStore({
   filePath: getPathLocalData('windowConfig.json')
 });

@@ -5,6 +5,7 @@ import './AppDropdown.css';
 export interface AppDropdownOption<T extends string | number> {
   value: T;
   label: string;
+  disabled?: boolean;
 }
 
 interface AppDropdownProps<T extends string | number> {
@@ -59,7 +60,9 @@ const AppDropdown = <T extends string | number>({
               key={String(option.value)}
               type="button"
               className={`context-menu-item app-dropdown-option ${option.value === value ? 'selected' : ''}`}
+              disabled={option.disabled}
               onClick={() => {
+                if (option.disabled) return;
                 onChange(option.value);
                 setIsOpen(false);
               }}

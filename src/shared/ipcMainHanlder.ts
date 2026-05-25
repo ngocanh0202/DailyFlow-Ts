@@ -1,5 +1,5 @@
 import { app, ipcMain, screen, dialog, Notification, nativeImage } from 'electron';
-import { taskStore, todoArchiveStore, todoStore } from './util.jsondata.js';
+import { aiAnalysisHistoryStore, taskStore, todoArchiveStore, todoStore } from './util.jsondata.js';
 import Store from 'electron-store';
 import { 
   closeAllExceptMain, 
@@ -193,6 +193,23 @@ export const setupIpcMainHandlers = () => {
     return await todoArchiveStore.clear();
   });
 
+  ipcMain.handle(IpcMainName.AI_ANALYSIS_HISTORY_GET_ALL, async () => {
+    const items = await aiAnalysisHistoryStore.getAll();
+    return [...items].sort((a: any, b: any) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
+  });
+
+  ipcMain.handle(IpcMainName.AI_ANALYSIS_HISTORY_UPSERT, async (event, entry) => {
+    return await aiAnalysisHistoryStore.upsert(entry);
+  });
+
+  ipcMain.handle(IpcMainName.AI_ANALYSIS_HISTORY_REMOVE, async (event, id: string) => {
+    return await aiAnalysisHistoryStore.remove(id);
+  });
+
+  ipcMain.handle(IpcMainName.AI_ANALYSIS_HISTORY_CLEAR, async () => {
+    return await aiAnalysisHistoryStore.clear();
+  });
+
   // Screen and Window Information
   ipcMain.handle(IpcMainName.GET_USER_SCREEN_SIZE, async () => {
     const { width, height } = screen.getPrimaryDisplay().workAreaSize;
@@ -289,6 +306,7 @@ export const setupIpcMainHandlers = () => {
       await taskStore.clear();
       await todoStore.clear();
       await todoArchiveStore.clear();
+      await aiAnalysisHistoryStore.clear();
       return true;
     } catch (err) {
       console.error('delete-all-data error:', err);

@@ -17,6 +17,7 @@ import {
   setDoneAndNextTask,
   setChangeCurrentTask,
   setTaskStatus,
+  setCurrentTaskId,
   setResetTodoFlow,
   addAndSetTaskBreak,
 } from "~/ui/store/todo/todoSlice";
@@ -36,6 +37,8 @@ import InputHandler from '~/ui/components/InputHandler/InputHandler';
 import { mainWindowResizeState } from '~/ui/helpers/utils/pageResizeState';
 import {
   canResumeTodoFlowEntry,
+  getRenderableTodoFlowTaskIds,
+  getTodoFlowCurrentTask,
   getTodoScheduleDateKeys,
   hasTodoFlowStarted,
   resetTodoFlowProgress,
@@ -60,6 +63,8 @@ const Todoflow = () => {
   const isCreateMode = routeState?.mode === 'create';
   const isFromDashboard = routeState?.fromDashboard === true;
   const assignedDateKeys = getTodoScheduleDateKeys(todoFlow);
+  const currentTask = getTodoFlowCurrentTask(todoFlow);
+  const renderableTaskIds = getRenderableTodoFlowTaskIds(todoFlow);
   const todayKey = toDateKey(new Date());
   const activeDateKey =
     routeState?.dateKey && assignedDateKeys.includes(routeState.dateKey)
@@ -278,13 +283,16 @@ const Todoflow = () => {
 
   const validationRules = () => {
     let valid = true;
+    const existingTaskIds = todoFlow.taskIds.filter((taskId, index, taskIds) => {
+      return Boolean(todoFlow.tasks[taskId]) && taskIds.indexOf(taskId) === index;
+    });
 
     if (!todoFlow.note.trim()) {
       setNoteError('Note cannot be empty');
       valid = false;
     }
 
-    if (todoFlow.taskIds.length === 0) {
+    if (existingTaskIds.length === 0) {
       info('Please add at least one task before starting.');
       return false;
     }
@@ -294,21 +302,18 @@ const Todoflow = () => {
       setTriggerTaskValidation(false);
     }, 100);
 
-    const hasEmptyTasks = todoFlow.taskIds.some(taskId => {
+    const hasEmptyTasks = existingTaskIds.some(taskId => {
       const task = todoFlow.tasks[taskId];
-      return !task || !task.title.trim();
+      return !task.title.trim();
     });
 
     if (hasEmptyTasks) {
       valid = false;
     }
 
-    const hasEmptySubtasks = todoFlow.taskIds.some(taskId => {
+    const hasEmptySubtasks = existingTaskIds.some(taskId => {
       const task = todoFlow.tasks[taskId];
-      if (task) {
-        return task.subTasks.some(subTask => !subTask.title.trim());
-      }
-      return false;
+      return task.subTasks.some(subTask => !subTask.title.trim());
     });
 
     if (hasEmptySubtasks) {
@@ -335,6 +340,9 @@ const Todoflow = () => {
       return;
     }
     soundPlayer.play(SoundType.SOUND_GAMBUSTA);
+    if (todoFlow.currentTaskId && !currentTask) {
+      dispatch(setCurrentTaskId(undefined));
+    }
     dispatch(setTodoStatus(TodoStatus.START_ON_PROGRESS));
     handleTodoCreation({ ...todoFlow, status: TodoStatus.START_ON_PROGRESS });
   };
@@ -356,24 +364,32 @@ const Todoflow = () => {
     }
   };
 
+  const completionPercent = todoFlow.taskTotal > 0 ? Math.round((todoFlow.taskCompleted / todoFlow.taskTotal) * 100) : 0;
+
   return (
     <div className="todoflow-page h-full">
-      <div className="todoflow-header mb-2 flex items-start justify-between" >
-        <div className='flex items-center w-full'>
-          <button className='btn btn-icon' onClick={() =>{
+      <div className="todoflow-header" >
+        <div className='todoflow-title-group'>
+          <button className='btn btn-icon todoflow-nav-button' title="Back to dashboard" onClick={() =>{
             dispatch(setStopTimer());
             window.electronAPI.setWindowAlwaysOnTop('main', false);
             navigate('/dashboard');
           }}><IoHomeOutline /></button>
-          <div className="text-sm text-gray-500 flex items-center gap-1 flex-1">
+          <div className="todoflow-title-copy">
+            <div className="todoflow-title-meta drag-area">
+              <span className={`todoflow-entry-badge ${isNewTodo ? 'draft' : 'saved'}`}>
+                {isNewTodo ? 'Draft' : 'Saved'}
+              </span>
+              <span>{activeDateKey || 'Unscheduled'}</span>
+            </div>
             <p className='drag-area'>
               {isNewTodo ? '🆕' : '✏️'}
             </p>
-            <div className='todoflow-note-area flex-1'>
+            <div className='todoflow-note-area'>
               <input 
                 type="text" 
-                className={`input input-primary z-50 ${noteError ? 'input-error' : ''}`} 
-                placeholder="Note" 
+                className={`input input-primary z-50 todoflow-note-input ${noteError ? 'input-error' : ''}`} 
+                placeholder="What are you working on?" 
                 value={todoFlow.note}
                 onChange={handleNoteChange}
                 onBlur={handleNoteBlur}
@@ -382,8 +398,8 @@ const Todoflow = () => {
             </div>
           </div>
         </div>
-        <div className='flex items-center gap-1'>
-          <button className="btn btn-icon" onClick={async () => {
+        <div className='todoflow-header-actions'>
+          <button className="btn btn-icon" title="Reset progress" onClick={async () => {
             const resetTodo = resetTodoFlowProgress(todoFlow);
             dispatch(setResetTodoFlow());
             await persistTodoFlow(resetTodo);
@@ -392,7 +408,7 @@ const Todoflow = () => {
           </button>
           {
             todoFlow.timer != null && (
-              <button className="btn btn-icon" onClick={() => {
+              <button className="btn btn-icon" title="Focus current task" onClick={() => {
                 const isValid = validationRules();
                 if (!isValid) return;
                 dispatch(setTodoStatus(TodoStatus.START_ON_PROGRESS));
@@ -403,6 +419,7 @@ const Todoflow = () => {
           }
           <button
             className="btn btn-icon"
+            title="TodoFlow settings"
             onClick={() => {
               navigate('/todoflow-setting', { state: { activeDateKey } });
             }}
@@ -411,6 +428,7 @@ const Todoflow = () => {
           </button>
           <button
             className="btn btn-icon"
+            title="Minimize"
             onClick={async () => {
               await window.electronAPI.appMinimize();
             }}
@@ -420,43 +438,51 @@ const Todoflow = () => {
         </div>
       </div>
   
-      <div className="card mt-3 todoflow-progress-card">
-        <div className='flex items-center justify-between'>
-          <div>
-            <span>Status: </span> <span className="text-highlight">{todoFlow.status == TodoStatus.STOP ? 'Stop' : 'Start'}</span>
+      <div className="card todoflow-progress-card">
+        <div className='todoflow-progress-summary'>
+          <div className="todoflow-metric">
+            <span>Status</span>
+            <strong className="text-highlight">{todoFlow.status == TodoStatus.STOP ? 'Ready' : 'Running'}</strong>
           </div>
-          <div>
-            <span>Actual: </span> <span className={todoFlow.actualTimeTodo > todoFlow.estimatedTimeTodo ? 'text-orange-500' : ''}>{formatTime(todoFlow.actualTimeTodo)}</span>
+          <div className="todoflow-metric">
+            <span>Actual</span>
+            <strong className={todoFlow.actualTimeTodo > todoFlow.estimatedTimeTodo ? 'text-orange-500' : ''}>{formatTime(todoFlow.actualTimeTodo)}</strong>
           </div>
-          <div>
-            <span>Est: </span> <span>{formatTime(todoFlow.estimatedTimeTodo || 0)}</span>
+          <div className="todoflow-metric">
+            <span>Estimate</span>
+            <strong>{formatTime(todoFlow.estimatedTimeTodo || 0)}</strong>
+          </div>
+          <div className="todoflow-metric">
+            <span>Done</span>
+            <strong>{completionPercent}%</strong>
           </div>
         </div>
-        <div className='flex items-center gap-2'>
+        <div className='todoflow-progress-row'>
           <div className="progress progress-xl">
               <div className="progress-bar" style={{ width: calculateProgressWidth(todoFlow.taskCompleted, todoFlow.taskTotal) }}></div>
           </div>
           <p className='whitespace-nowrap'>{`${todoFlow.taskCompleted}/${todoFlow.taskTotal} done`}</p>
         </div>
       </div>
-      {!todoFlow.currentTaskId && 
-        <div className='todoflow-action-row flex gap-2 mt-3'>
+      {!currentTask && 
+        <div className='todoflow-action-row'>
           <button 
-            className={`btn btn-primary flex-5 w-full h-[35px] text-xxl ${todoFlow.status === 'Start' ? 'disabled' : ''}`} 
+            className={`btn btn-primary todoflow-start-button ${todoFlow.status === 'Start' ? 'disabled' : ''}`} 
             onClick={handleToStart}
           >
-            Start
+            Start TodoFlow
           </button>
         </div>        
        }
-      <button className="todoflow-add-task btn btn-secondary mt-3 w-full h-[30px] text-2xl flex items-center justify-center"
+      <button className="todoflow-add-task btn btn-secondary"
         onClick={handleAddNewTask}>
         <IoAddCircleOutline />
+        <span>Add task</span>
       </button>
       <div className="todoflow-task-list overflow-y-auto" ref={containerTaskDiv}>
-        {todoFlow.currentTaskId && (
+        {currentTask && (
           <TaskPlayer 
-            task={todoFlow.tasks[todoFlow.currentTaskId]}
+            task={currentTask}
             isTimer={todoFlow.timer === null}
             isDoneTodo={todoFlow.taskCompleted === todoFlow.taskTotal} 
             onTakeBreak={() => {
@@ -476,8 +502,7 @@ const Todoflow = () => {
               dispatch(setStopTimer());
             }}
             onDoneTask={() => {
-              if (todoFlow.currentTaskId) {
-                const currentTask = todoFlow.tasks[todoFlow.currentTaskId];
+              if (todoFlow.currentTaskId && currentTask) {
                 dispatch(setStopTimer());
                 soundPlayer.play(currentTask.isTaskBreak ? SoundType.SOUND_SHINDERU : SoundType.SOUND_BOCCHI);
                 dispatch(setTaskStatus(TaskStatus.COMPLETED));
@@ -505,8 +530,8 @@ const Todoflow = () => {
             }
           />
         )}
-        {todoFlow.taskIds.filter(id => id !== todoFlow.currentTaskId && todoFlow.tasks[id].status !== TaskStatus.COMPLETED).map((taskIds, index) => (
-          <Task key={taskIds} taskId={taskIds} index={todoFlow.currentTaskId ? index + 1 : index} triggerValidation={triggerTaskValidation} />
+        {renderableTaskIds.map((taskIds, index) => (
+          <Task key={taskIds} taskId={taskIds} index={currentTask ? index + 1 : index} triggerValidation={triggerTaskValidation} />
         ))}
       </div>
       <button className='absolute bottom-4 left-4 btn btn-icon primary rounded-full text-4xl'

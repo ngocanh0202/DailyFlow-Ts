@@ -33,6 +33,10 @@ interface Window {
     todoReset: () => Promise<void>;
     todoArchiveGetAll: () => Promise<ArchivedTodoSummary[]>;
     todoArchiveClear: () => Promise<void>;
+    aiAnalysisHistoryGetAll: () => Promise<AiAnalysisHistoryEntry[]>;
+    aiAnalysisHistoryUpsert: (entry: AiAnalysisHistoryEntry) => Promise<AiAnalysisHistoryEntry>;
+    aiAnalysisHistoryRemove: (id: string) => Promise<boolean>;
+    aiAnalysisHistoryClear: () => Promise<void>;
     // Get user screen size
     getUserScreenSize: () => Promise<{ width: number; height: number }>;
     // Window configuration access
@@ -55,10 +59,11 @@ interface Window {
         icon?: string;
     }) => Promise<boolean>;
     aiRequest: (payload: {
-        provider: 'openai' | 'anthropic' | 'gemini';
+        provider: 'openai' | 'anthropic' | 'gemini' | 'custom';
         model: string;
         apiKey: string;
         prompt: string;
+        customUrl?: string;
     }) => Promise<string>;
     // App settings
     getSettings: () => Promise<AppSettings>;
@@ -158,4 +163,18 @@ interface ArchivedTodoSummary {
   taskCompleted: number;
   taskTotal: number;
   tasks: ArchivedTodoTaskSummary[];
+}
+
+interface AiAnalysisHistoryEntry {
+  id: string;
+  kind?: 'analysis' | 'draft';
+  createdAt: string;
+  provider: string;
+  model: string;
+  mode?: 'today_plan' | 'workload_review' | 'estimate_review';
+  outputLanguage: 'vi' | 'en' | 'ja';
+  userRequest: string;
+  summary: string;
+  rawResponse: string;
+  result: any;
 }
