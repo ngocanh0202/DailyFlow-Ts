@@ -4,9 +4,12 @@ import { IoClose, IoSaveOutline } from 'react-icons/io5';
 import './ScheduleEditor.css';
 import { generateId } from '~/ui/helpers/utils/utils';
 import {
+  applyTodoDateState,
   createDefaultTasksForSchedule,
   createScheduledTodoFlow,
+  ensureTodoDayPlans,
   findAutoFitScheduleSlot,
+  getTodoForDate,
   getTodoScheduleMinimumSlotDurationSeconds,
   getTodoScheduleMinimumTotalDurationSeconds,
   getTodoScheduleSelectionDurationSeconds,
@@ -103,6 +106,7 @@ const ScheduleEditor = () => {
   const returnTo = searchParams.get('returnTo');
   const activeDateKey = searchParams.get('activeDateKey');
   const [todo, setTodo] = useState<TodoFlow | null>(null);
+  const [sourceTodo, setSourceTodo] = useState<TodoFlow | null>(null);
   const [initialScheduleSlots, setInitialScheduleSlots] = useState<ScheduleSlot[]>([]);
   const [otherTodos, setOtherTodos] = useState<TodoFlow[]>([]);
   const [noteError, setNoteError] = useState('');
@@ -127,7 +131,9 @@ const ScheduleEditor = () => {
         ]);
         setOtherTodos(allTodos.filter((item) => item.id !== todoId));
         if (existing) {
-          const scopedExisting = setTodoAssignedDates(withoutRuntimeTimer(existing), dateKeys);
+          const source = withoutRuntimeTimer(existing);
+          const scopedExisting = setTodoAssignedDates(source, dateKeys);
+          setSourceTodo(source);
           setTodo(scopedExisting);
           setInitialScheduleSlots(scopedExisting.scheduleSlots || []);
           return;
@@ -137,6 +143,7 @@ const ScheduleEditor = () => {
       const allTodos = await window.electronAPI.todoGetAll();
       setOtherTodos(allTodos);
       const draftTodo = createScheduledTodoFlow(generateId(), dateKeys);
+      setSourceTodo(null);
       setTodo(draftTodo);
       setInitialScheduleSlots(draftTodo.scheduleSlots || []);
     };
@@ -411,8 +418,14 @@ const ScheduleEditor = () => {
         isCreateMode,
         totalSelectedDurationSeconds: totalSelectedDuration,
       });
-      const nextTodo = syncTodoTaskEstimatesWithDuration(ensureDefaultTasks(todo), nextEstimateDuration);
-      nextTodo.scheduleSlots?.forEach((slot) => secondsBetweenTimeStrings(slot.startTime, slot.endTime));
+      const scopedTodo = ensureTodoDayPlans(syncTodoTaskEstimatesWithDuration(ensureDefaultTasks(todo), nextEstimateDuration));
+      scopedTodo.scheduleSlots?.forEach((slot) => secondsBetweenTimeStrings(slot.startTime, slot.endTime));
+      const nextTodo = sourceTodo
+        ? dateKeys.reduce(
+            (mergedTodo, dateKey) => applyTodoDateState(mergedTodo, dateKey, getTodoForDate(scopedTodo, dateKey)),
+            sourceTodo
+          )
+        : scopedTodo;
       await window.electronAPI.todoUpsert(withoutRuntimeTimer(nextTodo));
       for (const taskId of nextTodo.taskIds) {
         const task = nextTodo.tasks[taskId];

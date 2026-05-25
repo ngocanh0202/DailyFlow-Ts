@@ -141,6 +141,26 @@ interface TodoTimeEditorCompletePayload {
   activeDateKey?: string | null;
 }
 
+interface TodoFlowDayTaskState {
+  estimatedTime: number;
+  actualTime: number;
+  status: TaskStatus;
+}
+
+interface TodoFlowDayPlan {
+  dateKey: string;
+  scheduleSlot?: ScheduleSlot;
+  status: TodoStatus;
+  estimatedTimeTodo: number;
+  actualTimeTodo: number;
+  taskCompleted: number;
+  taskTotal: number;
+  taskAllocations: Record<string, TodoFlowDayTaskState>;
+  currentTaskId?: string;
+  timeLeft?: number;
+  lastNotifiedDate?: string;
+}
+
 interface ArchivedTodoTaskSummary {
   taskId: string;
   title: string;

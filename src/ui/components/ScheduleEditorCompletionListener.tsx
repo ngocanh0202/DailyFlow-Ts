@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { setTodo } from '~/ui/store/todo/todoSlice';
 import { useAppDispatch } from '~/ui/store/hooks';
 import { useAlert } from '~/ui/helpers/hooks/useAlert';
-import { getTodoScheduleDateKeys, toDateKey } from '~/ui/helpers/utils/scheduleUtils';
+import { getTodoForDate, getTodoScheduleDateKeys, toDateKey } from '~/ui/helpers/utils/scheduleUtils';
 
 const ScheduleEditorCompletionListener = () => {
   const dispatch = useAppDispatch();
@@ -12,7 +12,7 @@ const ScheduleEditorCompletionListener = () => {
 
   useEffect(() => {
     const removeScheduleListener = window.electronAPI.onScheduleEditorCompleted(async ({ todo, mode, returnTo, activeDateKey }) => {
-      dispatch(setTodo(todo));
+      dispatch(setTodo(activeDateKey ? getTodoForDate(todo, activeDateKey) : todo));
       if (returnTo) {
         navigate(returnTo, { state: { activeDateKey } });
         return;
@@ -36,7 +36,7 @@ const ScheduleEditorCompletionListener = () => {
     });
 
     const removeTodoTimeListener = window.electronAPI.onTodoTimeEditorCompleted(({ todo, returnTo, activeDateKey }) => {
-      dispatch(setTodo(todo));
+      dispatch(setTodo(activeDateKey ? getTodoForDate(todo, activeDateKey) : todo));
       navigate(returnTo || '/todoflow-setting', { state: { activeDateKey } });
     });
 

@@ -36,6 +36,7 @@ import { FaMinus } from 'react-icons/fa';
 import InputHandler from '~/ui/components/InputHandler/InputHandler';
 import { mainWindowResizeState } from '~/ui/helpers/utils/pageResizeState';
 import {
+  applyTodoDateState,
   canResumeTodoFlowEntry,
   getRenderableTodoFlowTaskIds,
   getTodoFlowCurrentTask,
@@ -133,9 +134,10 @@ const Todoflow = () => {
 
     try {
       const persistableTodo = getPersistableTodoFlow(todo);
-      await window.electronAPI.todoUpsert(persistableTodo);
+      const nextTodo = activeDateKey ? applyTodoDateState(persistableTodo, activeDateKey, persistableTodo) : persistableTodo;
+      await window.electronAPI.todoUpsert(nextTodo);
       for (const taskId of persistableTodo.taskIds) {
-        const task = persistableTodo.tasks[taskId];
+        const task = nextTodo.tasks[taskId];
         if (task) {
           await window.electronAPI.taskUpsert(task);
         }

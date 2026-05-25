@@ -19,6 +19,7 @@ import { FaMinus } from "react-icons/fa6";
 import SoundPlayer from '~/ui/helpers/utils/SoundPlayer';
 import { SoundType } from '~/enums/Sound.Type.enum';
 import { mainWindowResizeState } from '~/ui/helpers/utils/pageResizeState';
+import { applyTodoDateState } from '~/ui/helpers/utils/scheduleUtils';
 
 
 const Focus = () => {
@@ -46,9 +47,12 @@ const Focus = () => {
 
     try {
       const persistableTodo = getPersistableTodo(nextTodo);
-      await window.electronAPI.todoUpsert(persistableTodo);
-      for (const taskId of persistableTodo.taskIds) {
-        const task = persistableTodo.tasks[taskId];
+      const persistedTodo = persistableTodo.activeDateKey
+        ? applyTodoDateState(persistableTodo, persistableTodo.activeDateKey, persistableTodo)
+        : persistableTodo;
+      await window.electronAPI.todoUpsert(persistedTodo);
+      for (const taskId of persistedTodo.taskIds) {
+        const task = persistedTodo.tasks[taskId];
         if (task) {
           await window.electronAPI.taskUpsert(task);
         }

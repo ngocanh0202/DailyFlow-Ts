@@ -900,6 +900,200 @@ function getScheduleSlotsMaxDurationSeconds(slots?: ScheduleSlot[]): number | un
   return Math.max(...slots.map((slot) => secondsBetweenTimeStrings(slot.startTime, slot.endTime)));
 }
 
+function getTodoNonBreakTaskIds(todo: TodoFlow): string[] {
+  return todo.taskIds.filter((taskId) => {
+    const task = todo.tasks[taskId];
+    return task && !task.isTaskBreak;
+  });
+}
+
+function buildTodoDayTaskAllocations(todo: TodoFlow): Record<string, TodoFlowDayTaskState> {
+  return todo.taskIds.reduce<Record<string, TodoFlowDayTaskState>>((allocations, taskId) => {
+    const task = todo.tasks[taskId];
+    if (task) {
+      allocations[taskId] = {
+        estimatedTime: Math.max(0, Math.floor(task.estimatedTime || 0)),
+        actualTime: Math.max(0, Math.floor(task.actualTime || 0)),
+        status: task.status || TaskStatus.NOT_STARTED,
+      };
+    }
+    return allocations;
+  }, {});
+}
+
+function createTodoDayPlan(todo: TodoFlow, dateKey: string): TodoFlowDayPlan {
+  const scheduleSlot = getScheduleSlotForDate(todo.scheduleSlots, dateKey);
+  const taskAllocations = buildTodoDayTaskAllocations(todo);
+  const taskTotal = Math.max(0, Math.floor(todo.taskTotal || getTodoNonBreakTaskIds(todo).length));
+
+  return {
+    dateKey,
+    scheduleSlot: scheduleSlot ? { ...scheduleSlot } : undefined,
+    status: todo.status,
+    estimatedTimeTodo: Math.max(0, Math.floor(todo.estimatedTimeTodo || getTodoTaskEstimatedSeconds(todo) || 0)),
+    actualTimeTodo: Math.max(0, Math.floor(todo.actualTimeTodo || 0)),
+    taskCompleted: Math.max(0, Math.floor(todo.taskCompleted || 0)),
+    taskTotal,
+    taskAllocations,
+    currentTaskId: todo.currentTaskId,
+    timeLeft: todo.timeLeft,
+    lastNotifiedDate: todo.lastNotifiedDate,
+  };
+}
+
+function normalizeTodoDayPlan(todo: TodoFlow, dateKey: string, plan?: TodoFlowDayPlan): TodoFlowDayPlan {
+  const fallback = createTodoDayPlan(todo, dateKey);
+  const taskAllocations = { ...fallback.taskAllocations, ...(plan?.taskAllocations || {}) };
+  const scheduleSlot = plan?.scheduleSlot || fallback.scheduleSlot;
+
+  return {
+    ...fallback,
+    ...plan,
+    dateKey,
+    scheduleSlot: scheduleSlot ? { ...scheduleSlot } : undefined,
+    estimatedTimeTodo: Math.max(0, Math.floor(plan?.estimatedTimeTodo ?? fallback.estimatedTimeTodo)),
+    actualTimeTodo: Math.max(0, Math.floor(plan?.actualTimeTodo ?? fallback.actualTimeTodo)),
+    taskCompleted: Math.max(0, Math.floor(plan?.taskCompleted ?? fallback.taskCompleted)),
+    taskTotal: Math.max(0, Math.floor(plan?.taskTotal ?? fallback.taskTotal)),
+    taskAllocations,
+  };
+}
+
+export function ensureTodoDayPlans(todo: TodoFlow): TodoFlow {
+  const dateKeys = getTodoScheduleDateKeys(todo);
+  if (dateKeys.length === 0) {
+    return todo;
+  }
+
+  const dayPlans = { ...(todo.dayPlans || {}) };
+  for (const dateKey of dateKeys) {
+    dayPlans[dateKey] = normalizeTodoDayPlan(todo, dateKey, dayPlans[dateKey]);
+  }
+
+  return {
+    ...todo,
+    dayPlans,
+  };
+}
+
+export function getTodoDayPlan(todo: TodoFlow, dateKey?: string): TodoFlowDayPlan | undefined {
+  if (!dateKey) {
+    return undefined;
+  }
+
+  return ensureTodoDayPlans(todo).dayPlans?.[dateKey];
+}
+
+export function getTodoForDate(todo: TodoFlow, dateKey?: string): TodoFlow {
+  const plan = getTodoDayPlan(todo, dateKey);
+  if (!plan) {
+    return todo;
+  }
+
+  const tasks = Object.fromEntries(
+    Object.entries(todo.tasks).map(([taskId, task]) => {
+      const allocation = plan.taskAllocations[taskId];
+      if (!allocation) {
+        return [taskId, task];
+      }
+
+      return [
+        taskId,
+        {
+          ...task,
+          estimatedTime: allocation.estimatedTime,
+          actualTime: allocation.actualTime,
+          status: allocation.status,
+        },
+      ];
+    })
+  ) as Record<string, Task>;
+
+  return {
+    ...ensureTodoDayPlans(todo),
+    status: plan.status,
+    estimatedTimeTodo: plan.estimatedTimeTodo,
+    actualTimeTodo: plan.actualTimeTodo,
+    taskCompleted: plan.taskCompleted,
+    taskTotal: plan.taskTotal,
+    currentTaskId: plan.currentTaskId,
+    timeLeft: plan.timeLeft,
+    lastNotifiedDate: plan.lastNotifiedDate,
+    activeDateKey: dateKey,
+    tasks,
+  };
+}
+
+export function applyTodoDateState(todo: TodoFlow, dateKey: string | undefined, scopedTodo: TodoFlow): TodoFlow {
+  if (!dateKey) {
+    return scopedTodo;
+  }
+
+  const baseTodo = ensureTodoDayPlans(todo);
+  const existingPlan = baseTodo.dayPlans?.[dateKey];
+  const taskAllocations = scopedTodo.taskIds.reduce<Record<string, TodoFlowDayTaskState>>((allocations, taskId) => {
+    const task = scopedTodo.tasks[taskId];
+    if (task) {
+      allocations[taskId] = {
+        estimatedTime: Math.max(0, Math.floor(task.estimatedTime || 0)),
+        actualTime: Math.max(0, Math.floor(task.actualTime || 0)),
+        status: task.status || TaskStatus.NOT_STARTED,
+      };
+    }
+    return allocations;
+  }, {});
+  const scopedSlot = getScheduleSlotForDate(scopedTodo.scheduleSlots, dateKey) || existingPlan?.scheduleSlot;
+  const dayPlans = {
+    ...(baseTodo.dayPlans || {}),
+    [dateKey]: normalizeTodoDayPlan(baseTodo, dateKey, {
+      dateKey,
+      scheduleSlot: scopedSlot ? { ...scopedSlot } : undefined,
+      status: scopedTodo.status,
+      estimatedTimeTodo: Math.max(0, Math.floor(scopedTodo.estimatedTimeTodo || 0)),
+      actualTimeTodo: Math.max(0, Math.floor(scopedTodo.actualTimeTodo || 0)),
+      taskCompleted: Math.max(0, Math.floor(scopedTodo.taskCompleted || 0)),
+      taskTotal: Math.max(0, Math.floor(scopedTodo.taskTotal || getTodoNonBreakTaskIds(scopedTodo).length)),
+      taskAllocations,
+      currentTaskId: scopedTodo.currentTaskId,
+      timeLeft: scopedTodo.timeLeft,
+      lastNotifiedDate: scopedTodo.lastNotifiedDate,
+    }),
+  };
+  const scheduleSlots = scopedSlot
+    ? applyScheduleSlot(baseTodo.scheduleSlots, scopedSlot)
+    : baseTodo.scheduleSlots;
+  const sharedTasks = Object.fromEntries(
+    Object.entries(scopedTodo.tasks).map(([taskId, task]) => {
+      const baseTask = baseTodo.tasks[taskId] || task;
+      return [
+        taskId,
+        {
+          ...baseTask,
+          title: task.title,
+          description: task.description,
+          isTaskBreak: task.isTaskBreak,
+          subTasks: task.subTasks,
+        },
+      ];
+    })
+  ) as Record<string, Task>;
+
+  return {
+    ...baseTodo,
+    note: scopedTodo.note,
+    taskIds: scopedTodo.taskIds,
+    tasks: sharedTasks,
+    scheduleSlots,
+    scheduledDate: getTodoScheduleDateKeys({ ...baseTodo, scheduleSlots })[0],
+    scheduledDates: getTodoScheduleDateKeys({ ...baseTodo, scheduleSlots }).length > 1
+      ? getTodoScheduleDateKeys({ ...baseTodo, scheduleSlots })
+      : undefined,
+    dayPlans,
+    activeDateKey: dateKey,
+    lastNotifiedDate: undefined,
+  };
+}
+
 export function getTodoScheduleTargetDurationSeconds(todo: TodoFlow, slots: ScheduleSlot[] = todo.scheduleSlots || []): number {
   const slotDuration = getScheduleSlotsDurationSeconds(slots);
   return Math.max(0, Math.floor(slotDuration ?? todo.estimatedTimeTodo ?? 0));
@@ -1046,12 +1240,16 @@ export function getTaskScheduleDateKeys(task: Task): string[] {
 function applyTodoScheduleDateKeys(todo: TodoFlow, dateKeys: string[]): TodoFlow {
   const uniqueDateKeys = uniqueSortedDateKeys(dateKeys);
   const scheduleSlots = (todo.scheduleSlots || []).filter((slot) => uniqueDateKeys.includes(slot.dateKey));
+  const dayPlans = Object.fromEntries(
+    Object.entries(todo.dayPlans || {}).filter(([dateKey]) => uniqueDateKeys.includes(dateKey))
+  ) as Record<string, TodoFlowDayPlan>;
 
   return {
     ...todo,
     scheduledDate: uniqueDateKeys[0],
     scheduledDates: uniqueDateKeys.length > 1 ? uniqueDateKeys : undefined,
     scheduleSlots: scheduleSlots.length > 0 ? scheduleSlots : undefined,
+    dayPlans: Object.keys(dayPlans).length > 0 ? dayPlans : undefined,
     lastNotifiedDate: undefined,
   };
 }
@@ -1133,6 +1331,7 @@ export function splitTodoFlowForDate(
     tasks: detachedTasks.tasks,
     taskIds: detachedTasks.taskIds,
     currentTaskId: detachedTasks.currentTaskId,
+    dayPlans: undefined,
     timer: null,
     lastNotifiedDate: undefined,
   };
@@ -1228,13 +1427,30 @@ export function getTodoFlowAnalytics(
   const todoStats = todos.reduce(
     (stats, todo) => {
       const dateKeys = getTodoScheduleDateKeys(todo);
+      const hasDayPlans = Boolean(todo.dayPlans && dateKeys.some((dateKey) => todo.dayPlans?.[dateKey]));
+      const dayPlans = hasDayPlans ? ensureTodoDayPlans(todo).dayPlans || {} : {};
       stats.scheduledDays += dateKeys.length;
       stats.todayTodoFlows += dateKeys.includes(todayKey) ? 1 : 0;
-      stats.completedTasks += todo.taskCompleted || 0;
-      stats.totalTasks += todo.taskTotal || todo.taskIds.filter((taskId) => !todo.tasks[taskId]?.isTaskBreak).length;
-      stats.inProgressTodoFlows += hasTodoFlowStarted(todo) && !isTodoCompleted(todo) ? 1 : 0;
-      stats.plannedSeconds += todo.estimatedTimeTodo || 0;
-      stats.actualSeconds += todo.actualTimeTodo || 0;
+      if (hasDayPlans) {
+        let hasActiveDay = false;
+        for (const dateKey of dateKeys) {
+          const plan = dayPlans[dateKey];
+          if (!plan) continue;
+          const scopedTodo = getTodoForDate(todo, dateKey);
+          stats.completedTasks += plan.taskCompleted || 0;
+          stats.totalTasks += plan.taskTotal || todo.taskIds.filter((taskId) => !todo.tasks[taskId]?.isTaskBreak).length;
+          stats.plannedSeconds += plan.estimatedTimeTodo || 0;
+          stats.actualSeconds += plan.actualTimeTodo || 0;
+          hasActiveDay ||= hasTodoFlowStarted(scopedTodo) && !isTodoCompleted(scopedTodo);
+        }
+        stats.inProgressTodoFlows += hasActiveDay ? 1 : 0;
+      } else {
+        stats.completedTasks += todo.taskCompleted || 0;
+        stats.totalTasks += todo.taskTotal || todo.taskIds.filter((taskId) => !todo.tasks[taskId]?.isTaskBreak).length;
+        stats.inProgressTodoFlows += hasTodoFlowStarted(todo) && !isTodoCompleted(todo) ? 1 : 0;
+        stats.plannedSeconds += todo.estimatedTimeTodo || 0;
+        stats.actualSeconds += todo.actualTimeTodo || 0;
+      }
       return stats;
     },
     {
@@ -1775,13 +1991,28 @@ export function setTodoScheduleSlot(todo: TodoFlow, slot: ScheduleSlot): TodoFlo
   const dateKeys = getScheduleSlotDateKeys(scheduleSlots);
   const currentEstimate = Math.max(0, Math.floor(todo.estimatedTimeTodo || 0));
   const slotDuration = secondsBetweenTimeStrings(slot.startTime, slot.endTime);
-
-  return {
+  const nextTodo = {
     ...todo,
     scheduleSlots,
     scheduledDate: dateKeys[0],
     scheduledDates: dateKeys.length > 1 ? dateKeys : undefined,
     estimatedTimeTodo: currentEstimate > 0 ? currentEstimate : slotDuration,
+    lastNotifiedDate: undefined,
+  };
+  const ensuredTodo = ensureTodoDayPlans(nextTodo);
+  const existingPlan = ensuredTodo.dayPlans?.[slot.dateKey];
+
+  return {
+    ...ensuredTodo,
+    dayPlans: {
+      ...(ensuredTodo.dayPlans || {}),
+      [slot.dateKey]: normalizeTodoDayPlan(ensuredTodo, slot.dateKey, {
+        ...(existingPlan || createTodoDayPlan(ensuredTodo, slot.dateKey)),
+        dateKey: slot.dateKey,
+        scheduleSlot: { ...slot },
+        estimatedTimeTodo: existingPlan?.estimatedTimeTodo ?? (currentEstimate > 0 ? currentEstimate : slotDuration),
+      }),
+    },
     lastNotifiedDate: undefined,
   };
 }

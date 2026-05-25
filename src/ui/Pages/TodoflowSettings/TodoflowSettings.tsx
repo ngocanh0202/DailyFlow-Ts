@@ -10,9 +10,11 @@ import { formatTime, generateId, parseTime } from '~/ui/helpers/utils/utils';
 import { useAppDispatch, useAppSelector } from '~/ui/store/hooks';
 import { setTodo } from '~/ui/store/todo/todoSlice';
 import {
+  applyTodoDateState,
   buildMonthDays,
   formatDateChipLabels,
   formatScheduleSlotChipLabels,
+  getTodoForDate,
   getTodoScheduleDateKeys,
   getTodoTaskEstimatedSeconds,
   isPastDateKey,
@@ -54,11 +56,6 @@ const TodoflowSettings = () => {
 
   useResizePage(PageType.TODOFLOW, 'left');
 
-  useEffect(() => {
-    setActualTimeInputValue(formatTime(todoFlow.actualTimeTodo || 0));
-    setEstimatedTimeInputValue(formatTime(todoFlow.estimatedTimeTodo || 0));
-  }, [todoFlow.actualTimeTodo, todoFlow.estimatedTimeTodo]);
-
   const assignedDateKeys = getTodoScheduleDateKeys(todoFlow);
   const todayKey = toDateKey(new Date());
   const assignCalendarDays = buildMonthDays(visibleMonthDate);
@@ -68,8 +65,14 @@ const TodoflowSettings = () => {
       : assignedDateKeys.includes(todayKey)
         ? todayKey
         : assignedDateKeys[0];
+  const activeTodoFlow = activeDateKey ? getTodoForDate(todoFlow, activeDateKey) : todoFlow;
   const canDetachTodoFlow = assignedDateKeys.length > 1 && Boolean(activeDateKey);
   const slotLabels = formatScheduleSlotChipLabels(todoFlow.scheduleSlots || []);
+
+  useEffect(() => {
+    setActualTimeInputValue(formatTime(activeTodoFlow.actualTimeTodo || 0));
+    setEstimatedTimeInputValue(formatTime(activeTodoFlow.estimatedTimeTodo || 0));
+  }, [activeTodoFlow.actualTimeTodo, activeTodoFlow.estimatedTimeTodo]);
 
   useEffect(() => {
     setSelectedAssignDateKeys(assignedDateKeys.filter((dateKey) => !isPastDateKey(dateKey)));
@@ -89,7 +92,8 @@ const TodoflowSettings = () => {
 
   const saveActualTime = async () => {
     const seconds = Math.max(0, Math.min(86400, parseTime(actualTimeInputValue) || 0));
-    const nextTodo = withoutRuntimeTimer({ ...todoFlow, actualTimeTodo: seconds });
+    const scopedTodo = { ...activeTodoFlow, actualTimeTodo: seconds };
+    const nextTodo = withoutRuntimeTimer(activeDateKey ? applyTodoDateState(todoFlow, activeDateKey, scopedTodo) : scopedTodo);
     dispatch(setTodo(nextTodo));
     await persistTodoFlow(nextTodo);
     setActualTimeInputValue(formatTime(seconds));
@@ -98,22 +102,23 @@ const TodoflowSettings = () => {
 
   const saveEstimatedTime = async () => {
     const seconds = Math.max(0, Math.min(86400, parseTime(estimatedTimeInputValue) || 0));
-    const taskTotal = getTodoTaskEstimatedSeconds(todoFlow);
+    const taskTotal = getTodoTaskEstimatedSeconds(activeTodoFlow);
     if (seconds < taskTotal) {
       setTimeError('Estimated time cannot be less than the current tasks total');
-      setEstimatedTimeInputValue(formatTime(todoFlow.estimatedTimeTodo || 0));
+      setEstimatedTimeInputValue(formatTime(activeTodoFlow.estimatedTimeTodo || 0));
       return;
     }
 
     const latestTodos = await window.electronAPI.todoGetAll().catch(() => []);
-    const resized = resizeTodoFlowScheduleDuration(todoFlow, seconds, latestTodos);
+    const resized = resizeTodoFlowScheduleDuration(activeTodoFlow, seconds, latestTodos);
     if (!resized.ok) {
       setTimeError(resized.reason);
-      setEstimatedTimeInputValue(formatTime(todoFlow.estimatedTimeTodo || 0));
+      setEstimatedTimeInputValue(formatTime(activeTodoFlow.estimatedTimeTodo || 0));
       return;
     }
 
-    const nextTodo = withoutRuntimeTimer(syncTodoTaskEstimatesWithDuration(resized.todo, seconds));
+    const scopedTodo = syncTodoTaskEstimatesWithDuration(resized.todo, seconds);
+    const nextTodo = withoutRuntimeTimer(activeDateKey ? applyTodoDateState(todoFlow, activeDateKey, scopedTodo) : scopedTodo);
     dispatch(setTodo(nextTodo));
     await persistTodoFlow(nextTodo);
     setEstimatedTimeInputValue(formatTime(seconds));

@@ -6,6 +6,8 @@ import { TaskStatus } from '~/enums/TaskStatus.Type.enum';
 import { formatTime, generateId, parseTime } from '~/ui/helpers/utils/utils';
 import {
   addTaskWithProportionalEstimate,
+  applyTodoDateState,
+  getTodoForDate,
   getTodoTaskEstimatedSeconds,
   redistributeTaskEstimateWithinTodo,
   reorderTodoTaskIds,
@@ -32,6 +34,7 @@ const TodoTimeEditor = () => {
   const activeDateKey = searchParams.get('activeDateKey');
   const laneRef = useRef<HTMLDivElement | null>(null);
   const [todo, setTodo] = useState<TodoFlow | null>(null);
+  const [sourceTodo, setSourceTodo] = useState<TodoFlow | null>(null);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [timeInputValue, setTimeInputValue] = useState('');
   const [error, setError] = useState('');
@@ -55,16 +58,19 @@ const TodoTimeEditor = () => {
         setError('TodoFlow not found');
         return;
       }
-      setTodo(withoutRuntimeTimer(existing));
-      const firstTaskId = existing.taskIds.find((taskId) => existing.tasks[taskId] && !existing.tasks[taskId].isTaskBreak);
+      const persistableSource = withoutRuntimeTimer(existing);
+      const scopedTodo = activeDateKey ? getTodoForDate(persistableSource, activeDateKey) : persistableSource;
+      setSourceTodo(persistableSource);
+      setTodo(withoutRuntimeTimer(scopedTodo));
+      const firstTaskId = scopedTodo.taskIds.find((taskId) => scopedTodo.tasks[taskId] && !scopedTodo.tasks[taskId].isTaskBreak);
       setSelectedTaskId(firstTaskId || null);
       if (firstTaskId) {
-        setTimeInputValue(formatTime(existing.tasks[firstTaskId].estimatedTime || 0));
+        setTimeInputValue(formatTime(scopedTodo.tasks[firstTaskId].estimatedTime || 0));
       }
     };
 
     loadTodo();
-  }, [todoId]);
+  }, [todoId, activeDateKey]);
 
   const taskIds = useMemo(
     () => todo?.taskIds.filter((taskId) => todo.tasks[taskId] && !todo.tasks[taskId].isTaskBreak) || [],
@@ -208,7 +214,8 @@ const TodoTimeEditor = () => {
 
   const saveAllocation = async () => {
     if (!todo) return;
-    const nextTodo = withoutRuntimeTimer(todo);
+    const baseTodo = sourceTodo || (todoId ? await window.electronAPI.todoGetById(todoId) : todo);
+    const nextTodo = withoutRuntimeTimer(activeDateKey ? applyTodoDateState(withoutRuntimeTimer(baseTodo), activeDateKey, todo) : todo);
     await window.electronAPI.todoUpsert(nextTodo);
     for (const taskId of nextTodo.taskIds) {
       const task = nextTodo.tasks[taskId];

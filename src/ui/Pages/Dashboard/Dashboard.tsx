@@ -10,6 +10,7 @@ import {
   formatDateChipLabels,
   getDueNotificationItems,
   getDueSlotNotificationItems,
+  getTodoForDate,
   getMonthCalendarGridStart,
   getTodoFlowLaunchLabel,
   groupScheduledItemsByDate,
@@ -121,7 +122,7 @@ const Dashboard = () => {
     if (activeTodoFlow.timer != null) {
       dispatch(setStopTimer());
     }
-    dispatch(setTodo(withoutRuntimeTimer(todo)));
+    dispatch(setTodo(withoutRuntimeTimer(dateKey ? getTodoForDate(todo, dateKey) : todo)));
     navigate('/todoflow', { state: { fromDashboard: true, dateKey } });
   };
 
