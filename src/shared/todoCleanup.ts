@@ -29,6 +29,8 @@ export interface ArchivedTodoSummary {
   tasks: ArchivedTodoTaskSummary[];
 }
 
+type ArchivedTodoTaskSummaryInput = Omit<ArchivedTodoTaskSummary, 'timeRatio'>;
+
 export function getTodoAssignedDateKeys(todo: any): string[] {
   const keys = new Set<string>();
 
@@ -85,8 +87,7 @@ function applyActiveDateKeys<T>(todo: T, activeDateKeys: string[]): T {
 }
 
 export function buildArchivedTodoSummary(todo: any, removedDateKeys: string[], now = new Date()): ArchivedTodoSummary {
-  const totalEstimatedTime = Math.max(0, Math.floor(todo?.estimatedTimeTodo || 0));
-  const tasks = Array.isArray(todo?.taskIds)
+  const taskItems: ArchivedTodoTaskSummaryInput[] = Array.isArray(todo?.taskIds)
     ? todo.taskIds
         .map((taskId: string) => todo?.tasks?.[taskId])
         .filter(Boolean)
@@ -100,10 +101,15 @@ export function buildArchivedTodoSummary(todo: any, removedDateKeys: string[], n
             completed: task.status === 'Completed',
             estimatedTime,
             actualTime: Math.max(0, Math.floor(task.actualTime || 0)),
-            timeRatio: totalEstimatedTime > 0 ? estimatedTime / totalEstimatedTime : 0,
           };
         })
     : [];
+  const taskEstimatedTotal = taskItems.reduce((total: number, task: ArchivedTodoTaskSummaryInput) => total + task.estimatedTime, 0);
+  const totalEstimatedTime = Math.max(0, Math.floor(todo?.estimatedTimeTodo || 0), taskEstimatedTotal);
+  const tasks: ArchivedTodoTaskSummary[] = taskItems.map((task: ArchivedTodoTaskSummaryInput) => ({
+    ...task,
+    timeRatio: totalEstimatedTime > 0 ? task.estimatedTime / totalEstimatedTime : 0,
+  }));
   const removedDateKeySet = new Set(removedDateKeys);
 
   return {

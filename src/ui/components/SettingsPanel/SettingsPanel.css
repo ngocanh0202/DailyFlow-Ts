@@ -1,3 +1,7 @@
+.settings-panel {
+  position: relative;
+}
+
 .settings-panel .settings-panel-row,
 .settings-panel .settings-panel-block {
   border-bottom: 1px solid var(--border-color);

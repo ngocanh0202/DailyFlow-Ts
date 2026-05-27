@@ -101,6 +101,42 @@ describe('todoSlice timer ticks', () => {
     expect(next.tasks['task-1'].actualTime).toBe(8);
   });
 
+  it('preserves TodoFlow buffer time when starting a timer recalculates task counts', () => {
+    const previous = {
+      ...buildRunningTodo(),
+      estimatedTimeTodo: 120,
+      tasks: {
+        ...buildRunningTodo().tasks,
+        'task-1': {
+          ...buildRunningTodo().tasks['task-1'],
+          estimatedTime: 60,
+        },
+      },
+    };
+
+    const next = todoReducer(previous, setStartTimer(0 as unknown as NodeJS.Timeout));
+
+    expect(next.estimatedTimeTodo).toBe(120);
+  });
+
+  it('raises TodoFlow estimated time when task estimates exceed the previous total', () => {
+    const previous = {
+      ...buildRunningTodo(),
+      estimatedTimeTodo: 120,
+      tasks: {
+        ...buildRunningTodo().tasks,
+        'task-1': {
+          ...buildRunningTodo().tasks['task-1'],
+          estimatedTime: 180,
+        },
+      },
+    };
+
+    const next = todoReducer(previous, setStartTimer(0 as unknown as NodeJS.Timeout));
+
+    expect(next.estimatedTimeTodo).toBe(180);
+  });
+
   it('stops a running timer when the active timer id is zero', () => {
     const started = todoReducer(buildRunningTodo(), setStartTimer(0 as unknown as NodeJS.Timeout));
 

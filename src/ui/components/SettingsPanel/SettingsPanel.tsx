@@ -49,8 +49,10 @@ const SettingsPanel = forwardRef<SettingsPanelHandle, SettingsPanelProps>(({
   const { toggleTheme } = useContext(ThemeContext);
   const { success } = useAlert();
   const [settings, setSettings] = useState<AppSettings>(defaultSettings);
+  const [isLoadingSettings, setIsLoadingSettings] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const soundPlayer = SoundPlayer.getInstance();
+  const isBusy = isLoadingSettings || isSaving;
 
   useEffect(() => {
     const loadSettings = async () => {
@@ -66,6 +68,8 @@ const SettingsPanel = forwardRef<SettingsPanelHandle, SettingsPanelProps>(({
         }
       } catch (error) {
         console.error('Error loading settings:', error);
+      } finally {
+        setIsLoadingSettings(false);
       }
     };
 
@@ -73,7 +77,10 @@ const SettingsPanel = forwardRef<SettingsPanelHandle, SettingsPanelProps>(({
   }, []);
 
   const saveSettings = async () => {
+    if (isBusy) return;
+
     try {
+      setIsSaving(true);
       soundPlayer.setSoundEnabled(settings.soundEnabled);
       soundPlayer.setStartupSoundEnabled(settings.startupSoundEnabled);
       soundPlayer.setVolume(settings.volume);
@@ -89,10 +96,12 @@ const SettingsPanel = forwardRef<SettingsPanelHandle, SettingsPanelProps>(({
       }
     } catch (error) {
       console.error('Error saving settings:', error);
+    } finally {
+      setIsSaving(false);
     }
   };
 
-  useImperativeHandle(ref, () => ({ saveSettings }), [settings]);
+  useImperativeHandle(ref, () => ({ saveSettings }), [settings, isBusy]);
 
   return (
     <div className="card settings-panel space-y-6">
@@ -108,6 +117,7 @@ const SettingsPanel = forwardRef<SettingsPanelHandle, SettingsPanelProps>(({
                 type="checkbox"
                 checked={settings.startWithWindows}
                 onChange={(event) => setSettings((current) => ({ ...current, startWithWindows: event.target.checked }))}
+                disabled={isBusy}
                 className="sr-only peer"
               />
               <div className="click settings-panel-switch"></div>
@@ -123,7 +133,11 @@ const SettingsPanel = forwardRef<SettingsPanelHandle, SettingsPanelProps>(({
           <AppDropdown
             value={settings.breakTime}
             options={breakTimeOptions}
-            onChange={(breakTime) => setSettings((current) => ({ ...current, breakTime }))}
+            onChange={(breakTime) => {
+              if (!isBusy) {
+                setSettings((current) => ({ ...current, breakTime }));
+              }
+            }}
           />
         </div>
       </div>
@@ -139,6 +153,7 @@ const SettingsPanel = forwardRef<SettingsPanelHandle, SettingsPanelProps>(({
               type="checkbox"
               checked={settings.soundEnabled}
               onChange={(event) => setSettings((current) => ({ ...current, soundEnabled: event.target.checked }))}
+              disabled={isBusy}
               className="sr-only peer"
             />
             <div className="click settings-panel-switch"></div>
@@ -157,7 +172,7 @@ const SettingsPanel = forwardRef<SettingsPanelHandle, SettingsPanelProps>(({
               type="checkbox"
               checked={settings.startupSoundEnabled && settings.soundEnabled}
               onChange={(event) => setSettings((current) => ({ ...current, startupSoundEnabled: event.target.checked }))}
-              disabled={!settings.soundEnabled}
+              disabled={!settings.soundEnabled || isBusy}
               className="sr-only peer"
             />
             <div className={`click settings-panel-switch ${settings.soundEnabled ? '' : 'disabled'}`}></div>
@@ -178,13 +193,14 @@ const SettingsPanel = forwardRef<SettingsPanelHandle, SettingsPanelProps>(({
               step="0.1"
               value={settings.volume}
               onChange={(event) => {
+                if (isBusy) return;
                 const volume = parseFloat(event.target.value);
                 setSettings((current) => ({ ...current, volume }));
                 if (!hideSaveButton) {
                   soundPlayer.setVolume(volume);
                 }
               }}
-              disabled={!settings.soundEnabled}
+              disabled={!settings.soundEnabled || isBusy}
               className={`click range flex-1 ${!settings.soundEnabled ? 'opacity-50 cursor-not-allowed' : ''}`}
             />
             <IoVolumeHighOutline />
@@ -203,6 +219,7 @@ const SettingsPanel = forwardRef<SettingsPanelHandle, SettingsPanelProps>(({
               type="checkbox"
               checked={JSON.parse(localStorage.getItem('isDarkTheme') || 'true')}
               onChange={toggleTheme}
+              disabled={isBusy}
               className="sr-only peer"
             />
             <div className="click settings-panel-switch"></div>
@@ -212,16 +229,24 @@ const SettingsPanel = forwardRef<SettingsPanelHandle, SettingsPanelProps>(({
 
       {!hideSaveButton && (
         <button
-          onClick={async () => {
-            setIsSaving(true);
-            await saveSettings();
-            setIsSaving(false);
-          }}
-          disabled={isSaving}
+          onClick={saveSettings}
+          disabled={isBusy}
           className="btn btn-primary w-full py-3 text-lg save-btn"
         >
-          {isSaving ? 'Saving...' : 'Save Settings'}
+          {isLoadingSettings ? 'Loading...' : isSaving ? 'Saving...' : 'Save Settings'}
         </button>
+      )}
+      {isLoadingSettings && (
+        <div className="async-inline-overlay no-drag" role="status">
+          <div className="startup-spinner" />
+          <span>Loading settings</span>
+        </div>
+      )}
+      {isSaving && (
+        <div className="async-inline-overlay no-drag" role="status">
+          <div className="startup-spinner" />
+          <span>Saving settings</span>
+        </div>
       )}
     </div>
   );

@@ -75,20 +75,31 @@ const Dashboard = () => {
   const [rangeStartDateKey, setRangeStartDateKey] = useState(() => toDateKey(new Date()));
   const [isSelectingDates, setIsSelectingDates] = useState(false);
   const [dayMenu, setDayMenu] = useState<{ dateKey: string; top: number; left: number } | null>(null);
+  const [isLoadingSchedule, setIsLoadingSchedule] = useState(true);
+  const [scheduleLoadError, setScheduleLoadError] = useState<string | null>(null);
 
   useResizePage(PageType.MAIN);
 
-  const fetchScheduleData = async () => {
+  const fetchScheduleData = async (showLoading = false) => {
     try {
+      if (showLoading) {
+        setIsLoadingSchedule(true);
+      }
+      setScheduleLoadError(null);
       const allTodos: TodoFlow[] = await window.electronAPI.todoGetAll();
       setTodos(allTodos.map(withoutRuntimeTimer));
     } catch (err) {
       console.error('Failed to fetch schedule data:', err);
+      setScheduleLoadError('Failed to load dashboard data.');
+    } finally {
+      if (showLoading) {
+        setIsLoadingSchedule(false);
+      }
     }
   };
 
   useEffect(() => {
-    fetchScheduleData();
+    fetchScheduleData(true);
   }, []);
 
   const monthDays = useMemo(() => buildCalendarWindowDays(visibleStartDate), [visibleStartDate]);
@@ -372,6 +383,19 @@ const Dashboard = () => {
         </div>
       </div>
 
+      {isLoadingSchedule && (
+        <div className="async-page-state" role="status">
+          <div className="startup-spinner" />
+          <span>Loading dashboard</span>
+        </div>
+      )}
+      {!isLoadingSchedule && scheduleLoadError && (
+        <div className="async-page-state error" role="alert">
+          <span>{scheduleLoadError}</span>
+        </div>
+      )}
+
+      {!isLoadingSchedule && !scheduleLoadError && (
       <div className="dashboard-calendar-layout" ref={calendarLayoutRef}>
         <aside className="dashboard-day-panel card">
           <div className="dashboard-panel-header">
@@ -489,6 +513,7 @@ const Dashboard = () => {
           )}
         </section>
       </div>
+      )}
     </div>
   );
 };

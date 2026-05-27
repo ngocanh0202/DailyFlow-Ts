@@ -269,11 +269,21 @@
 }
 
 .ai-recent-item {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
   border-bottom: 1px solid var(--border-color);
   padding: 8px 0;
+}
+
+.ai-recent-item-main {
+  min-width: 0;
+}
+
+.ai-recent-delete {
+  height: 30px;
+  width: 30px;
 }
 
 .ai-history-panel {

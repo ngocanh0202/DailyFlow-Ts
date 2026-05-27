@@ -36,9 +36,10 @@ import { FaMinus } from 'react-icons/fa';
 import InputHandler from '~/ui/components/InputHandler/InputHandler';
 import { mainWindowResizeState } from '~/ui/helpers/utils/pageResizeState';
 import {
-  applyTodoDateState,
   canResumeTodoFlowEntry,
   getRenderableTodoFlowTaskIds,
+  getPersistableTodoDateState,
+  getTodoEstimatedSeconds,
   getTodoFlowCurrentTask,
   getTodoScheduleDateKeys,
   hasTodoFlowStarted,
@@ -59,6 +60,7 @@ const Todoflow = () => {
   const [noteError, setNoteError] = useState<string>('');
   const [triggerTaskValidation, setTriggerTaskValidation] = useState<boolean>(false);
   const [isNewTodo, setIsNewTodo] = useState<boolean>(true);
+  const [isSavingTodo, setIsSavingTodo] = useState(false);
   const soundPlayer = SoundPlayer.getInstance();
   const routeState = location.state as { mode?: string; fromDashboard?: boolean; dateKey?: string } | null;
   const isCreateMode = routeState?.mode === 'create';
@@ -66,6 +68,7 @@ const Todoflow = () => {
   const assignedDateKeys = getTodoScheduleDateKeys(todoFlow);
   const currentTask = getTodoFlowCurrentTask(todoFlow);
   const renderableTaskIds = getRenderableTodoFlowTaskIds(todoFlow);
+  const estimatedTimeTodo = getTodoEstimatedSeconds(todoFlow);
   const todayKey = toDateKey(new Date());
   const activeDateKey =
     routeState?.dateKey && assignedDateKeys.includes(routeState.dateKey)
@@ -134,7 +137,7 @@ const Todoflow = () => {
 
     try {
       const persistableTodo = getPersistableTodoFlow(todo);
-      const nextTodo = activeDateKey ? applyTodoDateState(persistableTodo, activeDateKey, persistableTodo) : persistableTodo;
+      const nextTodo = getPersistableTodoDateState(persistableTodo, activeDateKey);
       await window.electronAPI.todoUpsert(nextTodo);
       for (const taskId of persistableTodo.taskIds) {
         const task = nextTodo.tasks[taskId];
@@ -166,7 +169,7 @@ const Todoflow = () => {
     todoFlow.status,
     todoFlow.taskCompleted,
     todoFlow.taskTotal,
-    todoFlow.estimatedTimeTodo,
+    estimatedTimeTodo,
     todoFlow.actualTimeTodo,
     todoFlow.currentTaskId,
     todoFlow.timeLeft,
@@ -346,23 +349,27 @@ const Todoflow = () => {
       dispatch(setCurrentTaskId(undefined));
     }
     dispatch(setTodoStatus(TodoStatus.START_ON_PROGRESS));
-    handleTodoCreation({ ...todoFlow, status: TodoStatus.START_ON_PROGRESS });
+    await handleTodoCreation({ ...todoFlow, status: TodoStatus.START_ON_PROGRESS });
   };
 
   const handleTodoCreation = async (todo: TodoFlow = todoFlow) => {
     try {
+      setIsSavingTodo(true);
       const persistableTodo = getPersistableTodoFlow(todo);
-      await window.electronAPI.todoUpsert(persistableTodo);
+      const nextTodo = getPersistableTodoDateState(persistableTodo, activeDateKey);
+      await window.electronAPI.todoUpsert(nextTodo);
       let tasksArray = persistableTodo.taskIds;
 
       for (const taskId of tasksArray) {
-        const task = persistableTodo.tasks[taskId];
+        const task = nextTodo.tasks[taskId];
         await window.electronAPI.taskUpsert(task);
       }
       
     } catch (error) {
       console.error('Failed to save todo:', error);
       info('Failed to save todo');
+    } finally {
+      setIsSavingTodo(false);
     }
   };
 
@@ -448,11 +455,11 @@ const Todoflow = () => {
           </div>
           <div className="todoflow-metric">
             <span>Actual</span>
-            <strong className={todoFlow.actualTimeTodo > todoFlow.estimatedTimeTodo ? 'text-orange-500' : ''}>{formatTime(todoFlow.actualTimeTodo)}</strong>
+            <strong className={todoFlow.actualTimeTodo > estimatedTimeTodo ? 'text-orange-500' : ''}>{formatTime(todoFlow.actualTimeTodo)}</strong>
           </div>
           <div className="todoflow-metric">
             <span>Estimate</span>
-            <strong>{formatTime(todoFlow.estimatedTimeTodo || 0)}</strong>
+            <strong>{formatTime(estimatedTimeTodo)}</strong>
           </div>
           <div className="todoflow-metric">
             <span>Done</span>
@@ -471,11 +478,18 @@ const Todoflow = () => {
           <button 
             className={`btn btn-primary todoflow-start-button ${todoFlow.status === 'Start' ? 'disabled' : ''}`} 
             onClick={handleToStart}
+            disabled={isSavingTodo}
           >
-            Start TodoFlow
+            {isSavingTodo ? 'Saving' : 'Start TodoFlow'}
           </button>
         </div>        
        }
+      {isSavingTodo && (
+        <div className="async-blocking-overlay no-drag" role="status">
+          <span className="startup-spinner" aria-hidden="true" />
+          <span>Saving TodoFlow</span>
+        </div>
+      )}
       <button className="todoflow-add-task btn btn-secondary"
         onClick={handleAddNewTask}>
         <IoAddCircleOutline />

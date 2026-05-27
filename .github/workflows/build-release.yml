@@ -1,0 +1,64 @@
+name: Build release artifacts
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - master
+
+jobs:
+  build:
+    name: Build ${{ matrix.platform }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows
+            os: windows-latest
+            command: npm run dist:win
+            artifact: release-windows
+            paths: |
+              release/*.exe
+              release/*.yml
+          - platform: linux
+            os: ubuntu-latest
+            command: npm run dist:linux
+            artifact: release-linux
+            paths: |
+              release/*.tar.gz
+              release/*.yml
+          - platform: macos
+            os: macos-latest
+            command: npm run dist:mac
+            artifact: release-macos
+            paths: |
+              release/*.dmg
+              release/*.yml
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run unit tests
+        run: npm run test:unit
+
+      - name: Build artifact
+        run: ${{ matrix.command }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.paths }}
+          if-no-files-found: error

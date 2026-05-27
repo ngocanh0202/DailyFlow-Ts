@@ -14,6 +14,7 @@ import {
   buildMonthDays,
   formatDateChipLabels,
   formatScheduleSlotChipLabels,
+  getTodoEstimatedSeconds,
   getTodoForDate,
   getTodoScheduleDateKeys,
   getTodoTaskEstimatedSeconds,
@@ -50,6 +51,7 @@ const TodoflowSettings = () => {
   const [estimatedTimeInputValue, setEstimatedTimeInputValue] = useState('');
   const [timeError, setTimeError] = useState('');
   const [isAssigningDates, setIsAssigningDates] = useState(false);
+  const [pendingAction, setPendingAction] = useState<string | null>(null);
   const [visibleMonthDate, setVisibleMonthDate] = useState(() => new Date());
   const [selectedAssignDateKeys, setSelectedAssignDateKeys] = useState<string[]>([]);
   const [rangeStartDateKey, setRangeStartDateKey] = useState(() => toDateKey(new Date()));
@@ -66,13 +68,15 @@ const TodoflowSettings = () => {
         ? todayKey
         : assignedDateKeys[0];
   const activeTodoFlow = activeDateKey ? getTodoForDate(todoFlow, activeDateKey) : todoFlow;
+  const estimatedTimeTodo = getTodoEstimatedSeconds(activeTodoFlow);
   const canDetachTodoFlow = assignedDateKeys.length > 1 && Boolean(activeDateKey);
   const slotLabels = formatScheduleSlotChipLabels(todoFlow.scheduleSlots || []);
+  const isBusy = Boolean(pendingAction);
 
   useEffect(() => {
     setActualTimeInputValue(formatTime(activeTodoFlow.actualTimeTodo || 0));
-    setEstimatedTimeInputValue(formatTime(activeTodoFlow.estimatedTimeTodo || 0));
-  }, [activeTodoFlow.actualTimeTodo, activeTodoFlow.estimatedTimeTodo]);
+    setEstimatedTimeInputValue(formatTime(estimatedTimeTodo));
+  }, [activeTodoFlow.actualTimeTodo, estimatedTimeTodo]);
 
   useEffect(() => {
     setSelectedAssignDateKeys(assignedDateKeys.filter((dateKey) => !isPastDateKey(dateKey)));
@@ -91,41 +95,54 @@ const TodoflowSettings = () => {
   };
 
   const saveActualTime = async () => {
+    if (isBusy) return;
     const seconds = Math.max(0, Math.min(86400, parseTime(actualTimeInputValue) || 0));
-    const scopedTodo = { ...activeTodoFlow, actualTimeTodo: seconds };
-    const nextTodo = withoutRuntimeTimer(activeDateKey ? applyTodoDateState(todoFlow, activeDateKey, scopedTodo) : scopedTodo);
-    dispatch(setTodo(nextTodo));
-    await persistTodoFlow(nextTodo);
-    setActualTimeInputValue(formatTime(seconds));
-    setTimeError('');
+    try {
+      setPendingAction('Saving actual time');
+      const scopedTodo = { ...activeTodoFlow, actualTimeTodo: seconds };
+      const nextTodo = withoutRuntimeTimer(activeDateKey ? applyTodoDateState(todoFlow, activeDateKey, scopedTodo) : scopedTodo);
+      dispatch(setTodo(nextTodo));
+      await persistTodoFlow(nextTodo);
+      setActualTimeInputValue(formatTime(seconds));
+      setTimeError('');
+    } finally {
+      setPendingAction(null);
+    }
   };
 
   const saveEstimatedTime = async () => {
+    if (isBusy) return;
     const seconds = Math.max(0, Math.min(86400, parseTime(estimatedTimeInputValue) || 0));
     const taskTotal = getTodoTaskEstimatedSeconds(activeTodoFlow);
     if (seconds < taskTotal) {
       setTimeError('Estimated time cannot be less than the current tasks total');
-      setEstimatedTimeInputValue(formatTime(activeTodoFlow.estimatedTimeTodo || 0));
+      setEstimatedTimeInputValue(formatTime(estimatedTimeTodo));
       return;
     }
 
-    const latestTodos = await window.electronAPI.todoGetAll().catch(() => []);
-    const resized = resizeTodoFlowScheduleDuration(activeTodoFlow, seconds, latestTodos);
-    if (!resized.ok) {
-      setTimeError(resized.reason);
-      setEstimatedTimeInputValue(formatTime(activeTodoFlow.estimatedTimeTodo || 0));
-      return;
-    }
+    try {
+      setPendingAction('Saving estimated time');
+      const latestTodos = await window.electronAPI.todoGetAll().catch(() => []);
+      const resized = resizeTodoFlowScheduleDuration(activeTodoFlow, seconds, latestTodos);
+      if (!resized.ok) {
+        setTimeError(resized.reason);
+        setEstimatedTimeInputValue(formatTime(estimatedTimeTodo));
+        return;
+      }
 
-    const scopedTodo = syncTodoTaskEstimatesWithDuration(resized.todo, seconds);
-    const nextTodo = withoutRuntimeTimer(activeDateKey ? applyTodoDateState(todoFlow, activeDateKey, scopedTodo) : scopedTodo);
-    dispatch(setTodo(nextTodo));
-    await persistTodoFlow(nextTodo);
-    setEstimatedTimeInputValue(formatTime(seconds));
-    setTimeError('');
+      const scopedTodo = syncTodoTaskEstimatesWithDuration(resized.todo, seconds);
+      const nextTodo = withoutRuntimeTimer(activeDateKey ? applyTodoDateState(todoFlow, activeDateKey, scopedTodo) : scopedTodo);
+      dispatch(setTodo(nextTodo));
+      await persistTodoFlow(nextTodo);
+      setEstimatedTimeInputValue(formatTime(seconds));
+      setTimeError('');
+    } finally {
+      setPendingAction(null);
+    }
   };
 
   const openScheduleEditor = async () => {
+    if (isBusy) return;
     if (!todoFlow.id) {
       info('Save the TodoFlow before editing schedule.');
       return;
@@ -139,25 +156,36 @@ const TodoflowSettings = () => {
       return;
     }
 
-    await persistTodoFlow(todoFlow);
-    await window.electronAPI.openScheduleEditorWindow({
-      todoId: todoFlow.id,
-      dateKeys: getTodoScheduleDateKeys(todoFlow),
-      returnTo: '/todoflow-setting',
-      activeDateKey,
-    });
+    try {
+      setPendingAction('Opening schedule editor');
+      await persistTodoFlow(todoFlow);
+      await window.electronAPI.openScheduleEditorWindow({
+        todoId: todoFlow.id,
+        dateKeys: getTodoScheduleDateKeys(todoFlow),
+        returnTo: '/todoflow-setting',
+        activeDateKey,
+      });
+    } finally {
+      setPendingAction(null);
+    }
   };
 
   const openTodoTimeEditor = async () => {
+    if (isBusy) return;
     if (!todoFlow.id) {
       info('Save the TodoFlow before editing time allocation.');
       return;
     }
-    await window.electronAPI.openTodoTimeEditorWindow({
-      todoId: todoFlow.id,
-      returnTo: '/todoflow-setting',
-      activeDateKey,
-    });
+    try {
+      setPendingAction('Opening time editor');
+      await window.electronAPI.openTodoTimeEditorWindow({
+        todoId: todoFlow.id,
+        returnTo: '/todoflow-setting',
+        activeDateKey,
+      });
+    } finally {
+      setPendingAction(null);
+    }
   };
 
   const moveAssignCalendar = (offset: number) => {
@@ -187,6 +215,7 @@ const TodoflowSettings = () => {
   };
 
   const saveAssignedDates = async () => {
+    if (isBusy) return;
     if (!todoFlow.id) {
       info('Save the TodoFlow before assigning dates.');
       return;
@@ -196,17 +225,23 @@ const TodoflowSettings = () => {
       return;
     }
 
-    setIsAssigningDates(false);
-    await persistTodoFlow(todoFlow);
-    await window.electronAPI.openScheduleEditorWindow({
-      todoId: todoFlow.id,
-      dateKeys: selectedAssignDateKeys,
-      returnTo: '/todoflow-setting',
-      activeDateKey: selectedAssignDateKeys[0],
-    });
+    try {
+      setPendingAction('Assigning dates');
+      setIsAssigningDates(false);
+      await persistTodoFlow(todoFlow);
+      await window.electronAPI.openScheduleEditorWindow({
+        todoId: todoFlow.id,
+        dateKeys: selectedAssignDateKeys,
+        returnTo: '/todoflow-setting',
+        activeDateKey: selectedAssignDateKeys[0],
+      });
+    } finally {
+      setPendingAction(null);
+    }
   };
 
   const handleDetachTodoFlow = async () => {
+    if (isBusy) return;
     if (!activeDateKey) return;
 
     const result = splitTodoFlowForDate(todoFlow, generateId(), activeDateKey, () => generateId());
@@ -216,6 +251,7 @@ const TodoflowSettings = () => {
     }
 
     try {
+      setPendingAction('Detaching TodoFlow');
       await window.electronAPI.todoUpsert(result.originalTodo);
       await window.electronAPI.todoUpsert(result.detachedTodo);
       for (const taskId of result.detachedTodo.taskIds) {
@@ -230,18 +266,26 @@ const TodoflowSettings = () => {
     } catch (error) {
       console.error('Failed to detach TodoFlow:', error);
       info('Failed to detach TodoFlow');
+    } finally {
+      setPendingAction(null);
     }
   };
 
   const handleDone = async () => {
-    await settingsPanelRef.current?.saveSettings();
-    navigate('/todoflow');
+    if (isBusy) return;
+    try {
+      setPendingAction('Saving settings');
+      await settingsPanelRef.current?.saveSettings();
+      navigate('/todoflow');
+    } finally {
+      setPendingAction(null);
+    }
   };
 
   return (
     <div className="todoflow-settings-page">
       <header className="todoflow-settings-header">
-        <button className="btn btn-icon" title="Back to TodoFlow" onClick={() => navigate('/todoflow')}>
+        <button className="btn btn-icon" title="Back to TodoFlow" disabled={isBusy} onClick={() => navigate('/todoflow')}>
           <IoArrowBackOutline />
         </button>
         <div className="todoflow-settings-title">
@@ -257,17 +301,17 @@ const TodoflowSettings = () => {
         </div>
         <DateChipList labels={formatDateChipLabels(assignedDateKeys)} emptyText="No assigned days" />
         <DateChipList labels={slotLabels} emptyText="No time slots" className="todoflow-settings-slots" />
-        <button className="btn btn-secondary todoflow-settings-action" onClick={openScheduleEditor}>
+        <button className="btn btn-secondary todoflow-settings-action" disabled={isBusy} onClick={openScheduleEditor}>
           {assignedDateKeys.length === 0 ? 'Assign Date' : 'Edit Schedule'}
         </button>
         {isAssigningDates && (
           <div className="todoflow-settings-calendar">
             <div className="todoflow-settings-calendar-header">
-              <button className="btn btn-secondary" onClick={() => moveAssignCalendar(-1)}>
+              <button className="btn btn-secondary" disabled={isBusy} onClick={() => moveAssignCalendar(-1)}>
                 Prev
               </button>
               <strong>{visibleMonthDate.toLocaleString('default', { month: 'long', year: 'numeric' })}</strong>
-              <button className="btn btn-secondary" onClick={() => moveAssignCalendar(1)}>
+              <button className="btn btn-secondary" disabled={isBusy} onClick={() => moveAssignCalendar(1)}>
                 Next
               </button>
             </div>
@@ -287,7 +331,7 @@ const TodoflowSettings = () => {
                     className={`todoflow-settings-day ${day.isCurrentMonth ? '' : 'muted'} ${day.isToday ? 'today' : ''} ${
                       isSelected ? 'selected' : ''
                     }`}
-                    disabled={isPastDay}
+                    disabled={isPastDay || isBusy}
                     onClick={(event) => {
                       if (event.shiftKey) {
                         selectAssignDateRange(dateKey);
@@ -307,21 +351,21 @@ const TodoflowSettings = () => {
             </div>
             <div className="todoflow-settings-calendar-actions">
               <span>{selectedAssignDateKeys.length} selected</span>
-              <button className="btn btn-secondary" onClick={() => setIsAssigningDates(false)}>
+              <button className="btn btn-secondary" disabled={isBusy} onClick={() => setIsAssigningDates(false)}>
                 Cancel
               </button>
-              <button className="btn btn-primary" onClick={saveAssignedDates}>
+              <button className="btn btn-primary" disabled={isBusy} onClick={saveAssignedDates}>
                 Assign
               </button>
             </div>
           </div>
         )}
-        <button className="btn btn-secondary todoflow-settings-action" onClick={openTodoTimeEditor}>
+        <button className="btn btn-secondary todoflow-settings-action" disabled={isBusy} onClick={openTodoTimeEditor}>
           <IoPieChartOutline />
           Edit Time Allocation
         </button>
         {canDetachTodoFlow && (
-          <button className="btn btn-secondary todoflow-settings-action todoflow-settings-detach" onClick={handleDetachTodoFlow}>
+          <button className="btn btn-secondary todoflow-settings-action todoflow-settings-detach" disabled={isBusy} onClick={handleDetachTodoFlow}>
             <IoGitBranchOutline />
             Detach {activeDateKey}
           </button>
@@ -342,6 +386,7 @@ const TodoflowSettings = () => {
                 if (event.key === 'Enter') event.currentTarget.blur();
               }}
               placeholder="HH:MM:SS"
+              disabled={isBusy}
             />
           </label>
           <label className="todoflow-settings-field">
@@ -358,6 +403,7 @@ const TodoflowSettings = () => {
                 if (event.key === 'Enter') event.currentTarget.blur();
               }}
               placeholder="HH:MM:SS"
+              disabled={isBusy}
             />
           </label>
         </div>
@@ -376,10 +422,16 @@ const TodoflowSettings = () => {
 
       <SettingsPanel ref={settingsPanelRef} hideStartWithWindows hideSaveButton showSuccessMessage={false} />
 
-      <button className="btn btn-primary todoflow-settings-save" onClick={handleDone}>
+      <button className="btn btn-primary todoflow-settings-save" disabled={isBusy} onClick={handleDone}>
         <IoSaveOutline />
         Done
       </button>
+      {pendingAction && (
+        <div className="async-blocking-overlay no-drag" role="status">
+          <div className="startup-spinner" />
+          <span>{pendingAction}</span>
+        </div>
+      )}
     </div>
   );
 };

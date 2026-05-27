@@ -136,16 +136,21 @@ export const setupIpcMainHandlers = () => {
   });
 
   ipcMain.handle(IpcMainName.TODO_GET_ALL, async () => {
-    const allTodos = await todoStore.getAll();
-    const { activeTodos, expiredTodos, archivedSummaries } = splitExpiredAssignedTodos(allTodos);
+    let nextActiveTodos: any[] = [];
+    let archivedSummaries: any[] = [];
+
+    await todoStore.updateAll(({ items: allTodos }) => {
+      const cleanupResult = splitExpiredAssignedTodos(allTodos);
+      nextActiveTodos = cleanupResult.activeTodos;
+      archivedSummaries = cleanupResult.archivedSummaries;
+      return { items: cleanupResult.expiredTodos.length > 0 || cleanupResult.archivedSummaries.length > 0 ? cleanupResult.activeTodos : allTodos };
+    });
+
     if (archivedSummaries.length > 0) {
-      const existingArchives = await todoArchiveStore.getAll();
-      await todoArchiveStore.writeAll({ items: [...existingArchives, ...archivedSummaries] });
+      await todoArchiveStore.updateAll(({ items }) => ({ items: [...items, ...archivedSummaries] }));
     }
-    if (expiredTodos.length > 0 || archivedSummaries.length > 0) {
-      await todoStore.writeAll({ items: activeTodos });
-    }
-    return activeTodos;
+
+    return nextActiveTodos;
   });
 
   ipcMain.handle(IpcMainName.TODO_GET_BY_ID, async (event, id) => {

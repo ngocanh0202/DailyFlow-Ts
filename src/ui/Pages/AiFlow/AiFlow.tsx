@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { MdDeleteForever } from 'react-icons/md';
 import { PageType } from '~/enums/PageType.enum';
 import { useResizePage } from '~/ui/helpers/hooks/useResizePage';
 import {
@@ -119,25 +120,37 @@ const AiFlow = () => {
   const [status, setStatus] = useState('');
   const [statusType, setStatusType] = useState<'info' | 'error'>('info');
   const [isLoading, setIsLoading] = useState(false);
+  const [isLoadingData, setIsLoadingData] = useState(true);
+  const [dataLoadError, setDataLoadError] = useState<string | null>(null);
+  const [pendingStorageAction, setPendingStorageAction] = useState<string | null>(null);
   const { askInApp, error: showError } = useAlert();
   useResizePage(PageType.MAIN);
 
   const fetchItems = async () => {
-    const [allTodos, allTasks, allArchivedTodos, allHistory]: [
-      TodoFlow[],
-      Task[],
-      ArchivedTodoSummary[],
-      AiAnalysisHistoryEntry[],
-    ] = await Promise.all([
-      window.electronAPI.todoGetAll(),
-      window.electronAPI.taskGetAll(),
-      window.electronAPI.todoArchiveGetAll(),
-      window.electronAPI.aiAnalysisHistoryGetAll(),
-    ]);
-    setTodos(allTodos.map(withoutRuntimeTimer));
-    setTasks(allTasks);
-    setArchivedTodos(allArchivedTodos);
-    setAnalysisHistory(allHistory);
+    try {
+      setIsLoadingData(true);
+      setDataLoadError(null);
+      const [allTodos, allTasks, allArchivedTodos, allHistory]: [
+        TodoFlow[],
+        Task[],
+        ArchivedTodoSummary[],
+        AiAnalysisHistoryEntry[],
+      ] = await Promise.all([
+        window.electronAPI.todoGetAll(),
+        window.electronAPI.taskGetAll(),
+        window.electronAPI.todoArchiveGetAll(),
+        window.electronAPI.aiAnalysisHistoryGetAll(),
+      ]);
+      setTodos(allTodos.map(withoutRuntimeTimer));
+      setTasks(allTasks);
+      setArchivedTodos(allArchivedTodos);
+      setAnalysisHistory(allHistory);
+    } catch (error) {
+      console.error('Failed to load AI context:', error);
+      setDataLoadError('Failed to load AI context data.');
+    } finally {
+      setIsLoadingData(false);
+    }
   };
 
   useEffect(() => {
@@ -311,9 +324,10 @@ const AiFlow = () => {
   };
 
   const importTodoFlowDraft = async () => {
-    if (!draftResult) return;
+    if (!draftResult || pendingStorageAction) return;
     const nextTodo = createTodoFlowFromAiDraft(draftResult, generateId(), generateId);
     try {
+      setPendingStorageAction('Importing draft');
       await window.electronAPI.todoUpsert(withoutRuntimeTimer(nextTodo));
       for (const taskId of nextTodo.taskIds) {
         const task = nextTodo.tasks[taskId];
@@ -328,6 +342,8 @@ const AiFlow = () => {
       setStatus(message);
       setStatusType('error');
       await showError(message, 'Import failed');
+    } finally {
+      setPendingStorageAction(null);
     }
   };
 
@@ -364,14 +380,37 @@ const AiFlow = () => {
   };
 
   const deleteHistoryEntry = async (entryId: string) => {
-    await window.electronAPI.aiAnalysisHistoryRemove(entryId);
-    setAnalysisHistory((current) => current.filter((entry) => entry.id !== entryId));
+    if (pendingStorageAction) return;
+    try {
+      setPendingStorageAction('Deleting history');
+      await window.electronAPI.aiAnalysisHistoryRemove(entryId);
+      setAnalysisHistory((current) => current.filter((entry) => entry.id !== entryId));
+    } finally {
+      setPendingStorageAction(null);
+    }
+  };
+
+  const deleteTodoFlowContextItem = async (todoId: string) => {
+    if (pendingStorageAction) return;
+    try {
+      setPendingStorageAction('Deleting TodoFlow');
+      await window.electronAPI.todoRemove(todoId);
+      setTodos((current) => current.filter((todo) => todo.id !== todoId));
+    } finally {
+      setPendingStorageAction(null);
+    }
   };
 
   const clearAnalysisHistory = async () => {
-    await window.electronAPI.aiAnalysisHistoryClear();
-    setAnalysisHistory([]);
-    setHistoryPage(1);
+    if (pendingStorageAction) return;
+    try {
+      setPendingStorageAction('Clearing history');
+      await window.electronAPI.aiAnalysisHistoryClear();
+      setAnalysisHistory([]);
+      setHistoryPage(1);
+    } finally {
+      setPendingStorageAction(null);
+    }
   };
 
   return (
@@ -380,6 +419,21 @@ const AiFlow = () => {
         <h1 className="text-2xl font-bold text-highlight">AI TodoFlow</h1>
       </div>
 
+      {isLoadingData && (
+        <div className="async-page-state" role="status">
+          <span className="startup-spinner" aria-hidden="true" />
+          <span>Loading AI context</span>
+        </div>
+      )}
+
+      {!isLoadingData && dataLoadError && (
+        <div className="async-page-state error" role="alert">
+          <span>{dataLoadError}</span>
+        </div>
+      )}
+
+      {!isLoadingData && !dataLoadError && (
+      <>
       <section className="ai-config card">
         <div>
           <AppDropdown
@@ -600,8 +654,8 @@ const AiFlow = () => {
                   </div>
                 ))}
               </div>
-              <button className="btn btn-primary w-full h-[36px]" disabled={isLoading} onClick={importTodoFlowDraft}>
-                Import draft
+              <button className="btn btn-primary w-full h-[36px]" disabled={isLoading || Boolean(pendingStorageAction)} onClick={importTodoFlowDraft}>
+                {pendingStorageAction === 'Importing draft' ? 'Importing' : 'Import draft'}
               </button>
             </div>
           ) : (
@@ -614,8 +668,8 @@ const AiFlow = () => {
         <div className="ai-context-heading">
           <h2>TodoFlow Context</h2>
           {analysisHistory.length > 0 && (
-            <button className="btn btn-secondary ai-clear-history" onClick={clearAnalysisHistory}>
-              Clear history
+            <button className="btn btn-secondary ai-clear-history" disabled={Boolean(pendingStorageAction)} onClick={clearAnalysisHistory}>
+              {pendingStorageAction === 'Clearing history' ? 'Clearing' : 'Clear history'}
             </button>
           )}
         </div>
@@ -640,8 +694,18 @@ const AiFlow = () => {
         <div className="ai-recent-list">
           {pagedTodos.map((todo) => (
             <div key={todo.id} className="ai-recent-item">
-              <strong>{todo.note || 'TodoFlow'}</strong>
-              <DateChipList labels={formatDateChipLabels(getTodoScheduleDateKeys(todo))} emptyText="Unscheduled" />
+              <div className="ai-recent-item-main">
+                <strong>{todo.note || 'TodoFlow'}</strong>
+                <DateChipList labels={formatDateChipLabels(getTodoScheduleDateKeys(todo))} emptyText="Unscheduled" />
+              </div>
+              <button
+                className="btn btn-icon ai-recent-delete"
+                title="Delete TodoFlow"
+                disabled={Boolean(pendingStorageAction)}
+                onClick={() => deleteTodoFlowContextItem(todo.id)}
+              >
+                <MdDeleteForever />
+              </button>
             </div>
           ))}
           {todos.length === 0 && <p className="ai-empty">No TodoFlows yet.</p>}
@@ -676,8 +740,8 @@ const AiFlow = () => {
                     {entry.kind === 'draft' ? 'Create Draft' : entry.mode || 'Analysis'}
                   </span>
                   </button>
-                  <button className="btn btn-secondary ai-history-delete" onClick={() => deleteHistoryEntry(entry.id)}>
-                    Delete
+                  <button className="btn btn-secondary ai-history-delete" disabled={Boolean(pendingStorageAction)} onClick={() => deleteHistoryEntry(entry.id)}>
+                    {pendingStorageAction === 'Deleting history' ? 'Deleting' : 'Delete'}
                   </button>
                 </div>
               ))}
@@ -702,6 +766,14 @@ const AiFlow = () => {
           )}
         </div>
       </section>
+      </>
+      )}
+      {pendingStorageAction && (
+        <div className="async-blocking-overlay no-drag" role="status">
+          <span className="startup-spinner" aria-hidden="true" />
+          <span>{pendingStorageAction}</span>
+        </div>
+      )}
     </div>
   );
 };

@@ -181,7 +181,7 @@ const todoflowSlice = createSlice({
       const taskTotal = state.taskIds.filter(id => !id.includes(PrefixType.BREAK_PREFIX)).length;
       state.taskTotal = taskTotal;
       state.taskCompleted = numberOfCompletedTasks;
-      state.estimatedTimeTodo = totalEstimatedTime;
+      state.estimatedTimeTodo = Math.max(state.estimatedTimeTodo || 0, totalEstimatedTime);
     },
 
     setNote: (state, action: PayloadAction<string>) => {

@@ -24,15 +24,26 @@ const Manage = () => {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [searchText, setSearchText] = useState('');
   const [filter, setFilter] = useState<ManageItemFilter>('all');
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   useResizePage(PageType.MAIN);
 
   const fetchItems = async () => {
-    const [allTodos, allTasks]: [TodoFlow[], Task[]] = await Promise.all([
-      window.electronAPI.todoGetAll(),
-      window.electronAPI.taskGetAll(),
-    ]);
-    setTodos(allTodos.map(withoutRuntimeTimer));
-    setTasks(allTasks);
+    try {
+      setIsLoading(true);
+      setLoadError(null);
+      const [allTodos, allTasks]: [TodoFlow[], Task[]] = await Promise.all([
+        window.electronAPI.todoGetAll(),
+        window.electronAPI.taskGetAll(),
+      ]);
+      setTodos(allTodos.map(withoutRuntimeTimer));
+      setTasks(allTasks);
+    } catch (error) {
+      console.error('Failed to load manage data:', error);
+      setLoadError('Failed to load TodoFlows and tasks.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -71,6 +82,21 @@ const Manage = () => {
         <h1 className="text-2xl font-bold text-highlight">Manage TodoFlow</h1>
       </div>
 
+      {isLoading && (
+        <div className="async-page-state" role="status">
+          <div className="startup-spinner" />
+          <span>Loading items</span>
+        </div>
+      )}
+
+      {!isLoading && loadError && (
+        <div className="async-page-state error" role="alert">
+          <span>{loadError}</span>
+        </div>
+      )}
+
+      {!isLoading && !loadError && (
+      <>
       <div className="manage-toolbar card">
         <input
           className="input input-primary manage-search"
@@ -120,6 +146,8 @@ const Manage = () => {
           )}
         </section>
       </div>
+      </>
+      )}
     </div>
   );
 };

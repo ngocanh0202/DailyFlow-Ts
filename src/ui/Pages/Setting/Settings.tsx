@@ -10,11 +10,15 @@ import './Settings.css';
 const Settings = () => {
   const navigate = useNavigate();
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [isDeletingData, setIsDeletingData] = useState(false);
 
   useResizePage(PageType.SETTING);
 
   const handleDeleteData = async () => {
+    if (isDeletingData) return;
+
     try {
+      setIsDeletingData(true);
       if (window.electronAPI?.deleteAllData) {
         await window.electronAPI.deleteAllData();
       } else {
@@ -29,6 +33,8 @@ const Settings = () => {
       soundPlayer.setVolume(1.0);
     } catch (error) {
       console.error('Error deleting data:', error);
+    } finally {
+      setIsDeletingData(false);
     }
   };
 
@@ -59,10 +65,11 @@ const Settings = () => {
             </div>
             <button
               onClick={() => setShowDeleteModal(true)}
+              disabled={isDeletingData}
               className="btn btn-secondary rounded-lg ml-4 px-6 py-2"
               style={{ borderColor: '#e53e3e', color: '#e53e3e' }}
             >
-              Delete Data
+              {isDeletingData ? 'Deleting' : 'Delete Data'}
             </button>
           </div>
         </div>
@@ -72,7 +79,9 @@ const Settings = () => {
         <div
           className="fixed inset-0 flex items-center justify-center z-50"
           style={{ background: 'var(--modal-bg)' }}
-          onClick={() => setShowDeleteModal(false)}
+          onClick={() => {
+            if (!isDeletingData) setShowDeleteModal(false);
+          }}
         >
           <div className="card max-w-md w-full mx-4 animate-pop" onClick={(event) => event.stopPropagation()}>
             <div className="mb-6">
@@ -85,18 +94,29 @@ const Settings = () => {
               </p>
             </div>
             <div className="flex gap-3">
-              <button onClick={() => setShowDeleteModal(false)} className="btn btn-secondary rounded-lg flex-1 py-3">
+              <button
+                onClick={() => setShowDeleteModal(false)}
+                disabled={isDeletingData}
+                className="btn btn-secondary rounded-lg flex-1 py-3"
+              >
                 Cancel
               </button>
               <button
                 onClick={handleDeleteData}
+                disabled={isDeletingData}
                 className="btn flex-1 py-3 !rounded-lg font-semibold text-white"
                 style={{ background: '#e53e3e', border: 'none' }}
               >
-                Delete
+                {isDeletingData ? 'Deleting' : 'Delete'}
               </button>
             </div>
           </div>
+        </div>
+      )}
+      {isDeletingData && (
+        <div className="async-blocking-overlay no-drag" role="status">
+          <div className="startup-spinner" />
+          <span>Deleting data</span>
         </div>
       )}
     </div>

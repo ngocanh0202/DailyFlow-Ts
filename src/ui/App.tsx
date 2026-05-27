@@ -42,6 +42,8 @@ function App() {
   const [isDarkTheme, setIsDarkTheme] = useState<boolean>(
     localStorage.getItem('isDarkTheme') === 'false' ? false : true
   );
+  const [isInitializing, setIsInitializing] = useState(true);
+  const [startupError, setStartupError] = useState<string | null>(null);
   const soundPlayer = SoundPlayer.getInstance();
 
 
@@ -61,6 +63,7 @@ function App() {
   useEffect(() => {
     const handleLoadSettings = async () =>{
       try{
+        setStartupError(null);
         const settings = await window.electronAPI.getSettings();
         if(settings){
           localStorage.setItem('settings', JSON.stringify(settings));
@@ -89,6 +92,9 @@ function App() {
         }
       }catch(err){
         console.error('Failed to load settings on app start:', err);
+        setStartupError('Startup settings could not be loaded. Default settings are active.');
+      } finally {
+        setIsInitializing(false);
       }
     }
 
@@ -104,9 +110,26 @@ function App() {
     handleSetThemeOnStart();
   }, []);
 
+  if (isInitializing) {
+    return (
+      <div className="startup-screen drag-area">
+        <div className="startup-mark">DailyFlow</div>
+        <div className="startup-status">
+          <span className="startup-spinner" aria-hidden="true" />
+          <span>Initializing workspace</span>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <Provider store={store}>
       <ThemeContext.Provider value={{ isDarkTheme, toggleTheme }}>
+          {startupError && (
+            <div className="startup-error no-drag" role="status">
+              {startupError}
+            </div>
+          )}
           <Routes>
             <Route path="/schedule-editor" element={<ScheduleEditor />} />
             <Route path="/" element={<DefaultLayout><Dashboard /></DefaultLayout>} />

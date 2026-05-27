@@ -19,7 +19,7 @@ import { FaMinus } from "react-icons/fa6";
 import SoundPlayer from '~/ui/helpers/utils/SoundPlayer';
 import { SoundType } from '~/enums/Sound.Type.enum';
 import { mainWindowResizeState } from '~/ui/helpers/utils/pageResizeState';
-import { applyTodoDateState } from '~/ui/helpers/utils/scheduleUtils';
+import { getPersistableTodoDateState } from '~/ui/helpers/utils/scheduleUtils';
 
 
 const Focus = () => {
@@ -31,6 +31,7 @@ const Focus = () => {
   const [isTitleHovered, setisTitleHovered] = useState(false);
   const [isTimeHovered, setisTimeHovered] = useState(false);
   const [isExpanded, setIsExpanded] = useState<boolean>(false);
+  const [pendingFocusAction, setPendingFocusAction] = useState<string | null>(null);
   const dispatch = useAppDispatch();
   const todo = useAppSelector((state) => state.todoflow);
   const {  
@@ -46,10 +47,7 @@ const Focus = () => {
     if (!nextTodo.id || !nextTodo.note.trim()) return;
 
     try {
-      const persistableTodo = getPersistableTodo(nextTodo);
-      const persistedTodo = persistableTodo.activeDateKey
-        ? applyTodoDateState(persistableTodo, persistableTodo.activeDateKey, persistableTodo)
-        : persistableTodo;
+      const persistedTodo = getPersistableTodoDateState(getPersistableTodo(nextTodo));
       await window.electronAPI.todoUpsert(persistedTodo);
       for (const taskId of persistedTodo.taskIds) {
         const task = persistedTodo.tasks[taskId];
@@ -125,6 +123,7 @@ const Focus = () => {
     const handleUpdateTodo = async () => {
       if (todo) {
         try {
+          setPendingFocusAction('Saving focus progress');
           await persistTodo();
           if (todo.status === TodoStatus.STOP || todo.status === TodoStatus.START_ON_TODO) {
             handleToWinOnTop(false);
@@ -132,6 +131,8 @@ const Focus = () => {
           }
         } catch (err) {
           console.error('Failed to update todo:', err);
+        } finally {
+          setPendingFocusAction(null);
         }
       }
     }
@@ -326,6 +327,12 @@ const Focus = () => {
           </div>
         : null
       }
+      {pendingFocusAction && (
+        <div className="async-blocking-overlay no-drag" role="status">
+          <div className="startup-spinner" />
+          <span>{pendingFocusAction}</span>
+        </div>
+      )}
 
     </div>
   );

@@ -8,6 +8,7 @@ import {
   addTaskWithProportionalEstimate,
   applyTodoDateState,
   getTodoForDate,
+  getTodoEstimatedSeconds,
   getTodoTaskEstimatedSeconds,
   redistributeTaskEstimateWithinTodo,
   reorderTodoTaskIds,
@@ -38,6 +39,7 @@ const TodoTimeEditor = () => {
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [timeInputValue, setTimeInputValue] = useState('');
   const [error, setError] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
   const [dragBoundary, setDragBoundary] = useState<{
     sourceTodo: TodoFlow;
     previousTaskId: string;
@@ -76,7 +78,7 @@ const TodoTimeEditor = () => {
     () => todo?.taskIds.filter((taskId) => todo.tasks[taskId] && !todo.tasks[taskId].isTaskBreak) || [],
     [todo]
   );
-  const totalSeconds = todo ? Math.max(0, todo.estimatedTimeTodo || getTodoTaskEstimatedSeconds(todo)) : 0;
+  const totalSeconds = todo ? getTodoEstimatedSeconds(todo) : 0;
   const selectedTask = todo && selectedTaskId ? todo.tasks[selectedTaskId] : undefined;
 
   useEffect(() => {
@@ -213,17 +215,24 @@ const TodoTimeEditor = () => {
   };
 
   const saveAllocation = async () => {
-    if (!todo) return;
-    const baseTodo = sourceTodo || (todoId ? await window.electronAPI.todoGetById(todoId) : todo);
-    const nextTodo = withoutRuntimeTimer(activeDateKey ? applyTodoDateState(withoutRuntimeTimer(baseTodo), activeDateKey, todo) : todo);
-    await window.electronAPI.todoUpsert(nextTodo);
-    for (const taskId of nextTodo.taskIds) {
-      const task = nextTodo.tasks[taskId];
-      if (task) {
-        await window.electronAPI.taskUpsert(task);
+    if (!todo || isSaving) return;
+    try {
+      setIsSaving(true);
+      const baseTodo = sourceTodo || (todoId ? await window.electronAPI.todoGetById(todoId) : todo);
+      const nextTodo = withoutRuntimeTimer(activeDateKey ? applyTodoDateState(withoutRuntimeTimer(baseTodo), activeDateKey, todo) : todo);
+      await window.electronAPI.todoUpsert(nextTodo);
+      for (const taskId of nextTodo.taskIds) {
+        const task = nextTodo.tasks[taskId];
+        if (task) {
+          await window.electronAPI.taskUpsert(task);
+        }
       }
+      await window.electronAPI.completeTodoTimeEditor({ todo: nextTodo, returnTo, activeDateKey });
+    } catch (error: any) {
+      setError(error.message || 'Failed to save time allocation');
+    } finally {
+      setIsSaving(false);
     }
-    await window.electronAPI.completeTodoTimeEditor({ todo: nextTodo, returnTo, activeDateKey });
   };
 
   if (!todo) {
@@ -242,12 +251,19 @@ const TodoTimeEditor = () => {
             <IoClose />
             Close
           </button>
-          <button className="btn btn-primary todo-time-editor-button" onClick={saveAllocation}>
+          <button className="btn btn-primary todo-time-editor-button" onClick={saveAllocation} disabled={isSaving}>
             <IoSaveOutline />
-            Save
+            {isSaving ? 'Saving' : 'Save'}
           </button>
         </div>
       </header>
+
+      {isSaving && (
+        <div className="async-blocking-overlay no-drag" role="status">
+          <span className="startup-spinner" aria-hidden="true" />
+          <span>Saving time allocation</span>
+        </div>
+      )}
 
       <section className="todo-time-editor-summary">
         <span>Total planned</span>

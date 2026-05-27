@@ -15,10 +15,11 @@
     "target": "dmg"
   },
   "linux": {
-    "target": "AppImage",
+    "target": "tar.gz",
     "category": "Utility"
   },
   "win": {
-    "target": ["nsis", "portable"]
+    "target": ["nsis", "portable"],
+    "signAndEditExecutable": false
   }
 }

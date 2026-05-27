@@ -111,6 +111,7 @@ const ScheduleEditor = () => {
   const [otherTodos, setOtherTodos] = useState<TodoFlow[]>([]);
   const [noteError, setNoteError] = useState('');
   const [slotError, setSlotError] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
   const [dragState, setDragState] = useState<{
     dateKey: string;
     edge: 'start' | 'end' | 'move';
@@ -394,7 +395,7 @@ const ScheduleEditor = () => {
   };
 
   const saveTodo = async () => {
-    if (!todo) return;
+    if (!todo || isSaving) return;
     if (!todo.note.trim()) {
       setNoteError('Note is required');
       return;
@@ -408,11 +409,12 @@ const ScheduleEditor = () => {
       return;
     }
     if (!isCreateMode && totalSelectedDuration < minimumTotalDuration) {
-      setSlotError('TodoFlow total time can only stay the same or be extended');
+      setSlotError('TodoFlow total time cannot be shorter than the existing plan or current tasks total');
       return;
     }
 
     try {
+      setIsSaving(true);
       const nextEstimateDuration = getTodoScheduleSaveEstimateDurationSeconds({
         todo,
         isCreateMode,
@@ -441,6 +443,8 @@ const ScheduleEditor = () => {
       });
     } catch (error: any) {
       setSlotError(error.message || 'Invalid time slot');
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -460,12 +464,19 @@ const ScheduleEditor = () => {
             <IoClose />
             Close
           </button>
-          <button className="btn btn-primary schedule-editor-button" onClick={saveTodo}>
+          <button className="btn btn-primary schedule-editor-button" onClick={saveTodo} disabled={isSaving}>
             <IoSaveOutline />
-            Save
+            {isSaving ? 'Saving' : 'Save'}
           </button>
         </div>
       </header>
+
+      {isSaving && (
+        <div className="async-blocking-overlay no-drag" role="status">
+          <span className="startup-spinner" aria-hidden="true" />
+          <span>Saving TodoFlow schedule</span>
+        </div>
+      )}
 
       <section className="schedule-editor-note">
         <label>

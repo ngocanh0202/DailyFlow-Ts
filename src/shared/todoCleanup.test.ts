@@ -124,4 +124,27 @@ describe('todoCleanup', () => {
 
     expect(summary.tasks.map((item) => item.timeRatio)).toEqual([0.25, 0.75]);
   });
+
+  it('does not archive a TodoFlow total below its task estimate total', () => {
+    const summary = buildArchivedTodoSummary(
+      {
+        id: 'todo-1',
+        note: 'Invalid total plan',
+        estimatedTimeTodo: 100,
+        actualTimeTodo: 80,
+        taskCompleted: 1,
+        taskTotal: 2,
+        taskIds: ['task-1', 'task-2'],
+        tasks: {
+          'task-1': { id: 'task-1', title: 'A', estimatedTime: 600, actualTime: 30, status: 'Completed' },
+          'task-2': { id: 'task-2', title: 'B', estimatedTime: 900, actualTime: 50, status: 'Paused' },
+        },
+      },
+      ['2026-05-17'],
+      new Date('2026-05-18T10:00:00')
+    );
+
+    expect(summary.totalEstimatedTime).toBe(1500);
+    expect(summary.tasks.map((item) => item.timeRatio)).toEqual([0.4, 0.6]);
+  });
 });
