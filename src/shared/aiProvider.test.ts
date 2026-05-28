@@ -142,6 +142,27 @@ describe('requestAiProvider', () => {
     expect(requestedHeaders).toEqual({ Authorization: 'Bearer custom-key', 'Content-Type': 'application/json' });
     expect(JSON.parse(requestedBody)).toEqual({ model: 'dailyflow-todoflow-v1', prompt: 'hello' });
   });
+
+  it('stringifies custom provider object outputs instead of returning non-string values', async () => {
+    const fetchClient = async () =>
+      new Response(JSON.stringify({ output: { text: 'Nested custom response' } }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+
+    await expect(
+      requestAiProvider(
+        {
+          provider: 'custom',
+          model: 'dailyflow-todoflow-v1',
+          apiKey: 'custom-key',
+          prompt: 'hello',
+          customUrl: 'https://ai.example.test/todoflow',
+        },
+        fetchClient
+      )
+    ).resolves.toBe(JSON.stringify({ text: 'Nested custom response' }, null, 2));
+  });
 });
 
 describe('formatAiProviderError', () => {

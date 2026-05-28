@@ -109,6 +109,7 @@ const AiFlow = () => {
   const [config, setConfig] = useState<AiConfig>(() => loadAiConfig());
   const [analysisPrompt, setAnalysisPrompt] = useState('');
   const [draftPrompt, setDraftPrompt] = useState('');
+  const [analysisFollowUpPrompt, setAnalysisFollowUpPrompt] = useState('');
   const [result, setResult] = useState('');
   const [analysisResult, setAnalysisResult] = useState<AiTodoFlowAnalysis | null>(null);
   const [draftResult, setDraftResult] = useState<AiTodoFlowDraft | null>(null);
@@ -283,11 +284,23 @@ const AiFlow = () => {
     }
   };
 
-  const createTodoFlowDraft = async () => {
+  const buildAnalysisPromptContext = (analysis: AiTodoFlowAnalysis): string => {
+    return [
+      `Summary: ${analysis.summary}`,
+      `Metrics: planned ${formatTime(analysis.metrics.plannedSeconds)}, actual ${formatTime(analysis.metrics.actualSeconds)}, completion ${analysis.metrics.completionRate}%, risks ${analysis.metrics.riskyItemCount}`,
+      `Risks: ${analysis.risks.map((risk) => `${risk.severity} - ${risk.title}: ${risk.reason}`).join(' | ') || 'None'}`,
+      `Priorities: ${analysis.priorities.map((priority) => `${priority.title}: ${priority.reason}`).join(' | ') || 'None'}`,
+      `Suggestions: ${analysis.scheduleSuggestions.map((suggestion) => `${suggestion.action} - ${suggestion.title}: ${suggestion.reason}`).join(' | ') || 'None'}`,
+      `Action plan: ${analysis.actionPlan.join(' | ') || 'None'}`,
+    ].join('\n');
+  };
+
+  const createTodoFlowDraft = async (requestOverride?: string, analysisContext = '') => {
     const shouldContinue = await confirmNoDataRequest('Create Draft');
     if (!shouldContinue) return;
 
-    const prompt = createAiTodoFlowPrompt(todos, tasks, draftPrompt, undefined, outputLanguage);
+    const userRequest = requestOverride ?? draftPrompt;
+    const prompt = createAiTodoFlowPrompt(todos, tasks, userRequest, undefined, outputLanguage, analysisContext);
     setIsLoading(true);
     setStatus('Creating TodoFlow draft...');
     setStatusType('info');
@@ -303,7 +316,7 @@ const AiFlow = () => {
         provider: config.provider,
         model: config.model,
         outputLanguage,
-        userRequest: draftPrompt,
+        userRequest,
         rawResponse: response,
         result: parsedDraft,
       });
@@ -321,6 +334,15 @@ const AiFlow = () => {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const createDraftFromAnalysis = async (mode: 'improve' | 'new') => {
+    if (!analysisResult) return;
+    const fallbackRequest = mode === 'improve'
+      ? 'Improve the existing TodoFlow plan using the previous analysis. Keep useful work, reduce risk, and rebalance the task breakdown.'
+      : 'Create a new TodoFlow draft that responds to the previous analysis.';
+    const request = analysisFollowUpPrompt.trim() || fallbackRequest;
+    await createTodoFlowDraft(request, buildAnalysisPromptContext(analysisResult));
   };
 
   const importTodoFlowDraft = async () => {
@@ -538,7 +560,7 @@ const AiFlow = () => {
             onChange={(event) => setDraftPrompt(event.target.value)}
             placeholder="Example: Create a 90-minute draft for fixing provider errors and reviewing UI"
           />
-          <button className="btn btn-primary w-full h-[36px]" disabled={isLoading} onClick={createTodoFlowDraft}>
+          <button className="btn btn-primary w-full h-[36px]" disabled={isLoading} onClick={() => createTodoFlowDraft()}>
             Create Draft
           </button>
         </section>
@@ -631,6 +653,25 @@ const AiFlow = () => {
                     ))}
                   </ol>
                 )}
+              </section>
+
+              <section className="ai-analysis-section ai-analysis-followup">
+                <h3>Follow-up</h3>
+                <textarea
+                  className="input input-primary ai-followup-textarea"
+                  value={analysisFollowUpPrompt}
+                  disabled={isLoading}
+                  onChange={(event) => setAnalysisFollowUpPrompt(event.target.value)}
+                  placeholder="Add what you want changed based on this analysis"
+                />
+                <div className="ai-followup-actions">
+                  <button className="btn btn-secondary" disabled={isLoading} onClick={() => createDraftFromAnalysis('improve')}>
+                    Improve TodoFlow
+                  </button>
+                  <button className="btn btn-primary" disabled={isLoading} onClick={() => createDraftFromAnalysis('new')}>
+                    Create New Draft
+                  </button>
+                </div>
               </section>
             </div>
           ) : draftResult ? (

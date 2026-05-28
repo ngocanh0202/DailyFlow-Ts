@@ -69,4 +69,14 @@ describe('JsonStore', () => {
 
     expect(items.map((item) => item.id)).toEqual(['task-1']);
   });
+
+  it('generates an id when create receives an undefined id property', async () => {
+    const store = await createTempStore();
+
+    const created = await store.create({ id: undefined, title: 'Needs id' });
+
+    expect(created.id).toEqual(expect.any(String));
+    expect(created.id).not.toBe('');
+    expect((await store.getAll())[0].id).toBe(created.id);
+  });
 });

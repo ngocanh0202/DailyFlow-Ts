@@ -75,11 +75,17 @@ function getTodoScheduleSlots(todo: any): Array<{ dateKey: string; startTime: st
 function applyActiveDateKeys<T>(todo: T, activeDateKeys: string[]): T {
   const activeKeySet = new Set(activeDateKeys);
   const scheduleSlots = getTodoScheduleSlots(todo).filter((slot) => activeKeySet.has(slot.dateKey));
+  const dayPlans = (todo as any)?.dayPlans && typeof (todo as any).dayPlans === 'object'
+    ? Object.fromEntries(
+        Object.entries((todo as any).dayPlans).filter(([dateKey]) => activeKeySet.has(dateKey))
+      )
+    : undefined;
   const nextTodo: any = {
     ...(todo as any),
     scheduledDate: activeDateKeys[0],
     scheduledDates: activeDateKeys.length > 1 ? activeDateKeys : undefined,
     scheduleSlots: scheduleSlots.length > 0 ? scheduleSlots : undefined,
+    dayPlans: dayPlans && Object.keys(dayPlans).length > 0 ? dayPlans : undefined,
     lastNotifiedDate: undefined,
   };
 

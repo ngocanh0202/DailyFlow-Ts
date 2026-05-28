@@ -8,11 +8,13 @@ import { useResizePage } from '~/ui/helpers/hooks/useResizePage';
 import {
   buildCalendarWindowDays,
   formatDateChipLabels,
+  filterTodoFlowsAssignableToDateSelection,
   getDueNotificationItems,
   getDueSlotNotificationItems,
   getTodoForDate,
   getMonthCalendarGridStart,
   getTodoFlowLaunchLabel,
+  getTodoScheduleDateKeys,
   groupScheduledItemsByDate,
   groupScheduledItemsForDateRange,
   type DueSlotNotificationItem,
@@ -66,7 +68,6 @@ const Dashboard = () => {
   const calendarLayoutRef = useRef<HTMLDivElement | null>(null);
   const calendarMainRef = useRef<HTMLElement | null>(null);
   const datePickerRef = useRef<HTMLInputElement | null>(null);
-  const lastWheelMonthSwitchRef = useRef(0);
   const lastDragMonthSwitchRef = useRef(0);
   const [todos, setTodos] = useState<TodoFlow[]>([]);
   const [visibleStartDate, setVisibleStartDate] = useState(() => getMonthCalendarGridStart(new Date()));
@@ -75,6 +76,7 @@ const Dashboard = () => {
   const [rangeStartDateKey, setRangeStartDateKey] = useState(() => toDateKey(new Date()));
   const [isSelectingDates, setIsSelectingDates] = useState(false);
   const [dayMenu, setDayMenu] = useState<{ dateKey: string; top: number; left: number } | null>(null);
+  const [dayMenuSearch, setDayMenuSearch] = useState('');
   const [isLoadingSchedule, setIsLoadingSchedule] = useState(true);
   const [scheduleLoadError, setScheduleLoadError] = useState<string | null>(null);
 
@@ -112,6 +114,10 @@ const Dashboard = () => {
     () => groupScheduledItemsForDateRange(todos, [], selectedDateKeys),
     [todos, selectedDateKeys]
   );
+  const assignableTodos = useMemo(
+    () => filterTodoFlowsAssignableToDateSelection(todos, selectedDateKeys, dayMenuSearch),
+    [dayMenuSearch, selectedDateKeys, todos]
+  );
 
   const openScheduleEditor = async (payload: { todoId?: string; dateKeys?: string[] } = {}) => {
     const targetDateKeys = selectedDateKeys.length > 0 ? selectedDateKeys : [selectedDateKey];
@@ -127,6 +133,7 @@ const Dashboard = () => {
     });
     await fetchScheduleData();
     setDayMenu(null);
+    setDayMenuSearch('');
   };
 
   const openTodo = (todo: TodoFlow, dateKey?: string) => {
@@ -232,23 +239,19 @@ const Dashboard = () => {
   };
 
   useEffect(() => {
-    const calendarMain = calendarMainRef.current;
-    if (!calendarMain) return;
+    const calendarLayout = calendarLayoutRef.current;
+    if (!calendarLayout) return;
 
     const handleCalendarWheel = (event: WheelEvent) => {
       if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
 
       event.preventDefault();
-      const now = Date.now();
-      if (now - lastWheelMonthSwitchRef.current < MONTH_SWITCH_COOLDOWN_MS) return;
-
-      lastWheelMonthSwitchRef.current = now;
       moveVisibleRows(event.deltaY > 0 ? 1 : -1);
     };
 
-    calendarMain.addEventListener('wheel', handleCalendarWheel, { passive: false });
-    return () => calendarMain.removeEventListener('wheel', handleCalendarWheel);
-  }, []);
+    calendarLayout.addEventListener('wheel', handleCalendarWheel, { passive: false });
+    return () => calendarLayout.removeEventListener('wheel', handleCalendarWheel);
+  }, [isLoadingSchedule, scheduleLoadError]);
 
   const moveVisibleRowsWithSelection = (offset: number) => {
     setVisibleStartDate((current) => {
@@ -296,6 +299,7 @@ const Dashboard = () => {
       top: Math.max(16, Math.min(rect.bottom + 8, window.innerHeight - 280)),
       left: Math.max(16, Math.min(rect.left, window.innerWidth - menuWidth - 16)),
     });
+    setDayMenuSearch('');
   };
 
   const selectSingleDate = (dateKey: string) => {
@@ -502,12 +506,40 @@ const Dashboard = () => {
               <div className="dashboard-day-menu-title">
                 Add to {selectedDateCount > 1 ? `${selectedDateCount} days` : dayMenu.dateKey}
               </div>
+              <div className="dashboard-day-menu-search">
+                <input
+                  className="input input-primary"
+                  value={dayMenuSearch}
+                  placeholder="Search TodoFlows"
+                  onChange={(event) => setDayMenuSearch(event.target.value)}
+                />
+              </div>
+              <div className="dashboard-day-menu-section">
+                Existing TodoFlows ({assignableTodos.length})
+              </div>
+              {assignableTodos.length === 0 ? (
+                <div className="context-menu-item dashboard-menu-empty">
+                  No TodoFlows with {selectedDateCount} assigned {selectedDateCount === 1 ? 'day' : 'days'}.
+                </div>
+              ) : (
+                assignableTodos.map((todo) => (
+                  <button
+                    key={todo.id}
+                    type="button"
+                    className="context-menu-item dashboard-menu-entry"
+                    onClick={() => openScheduleEditor({ todoId: todo.id, dateKeys: selectedDateKeys })}
+                  >
+                    <span className="dashboard-menu-label">{todo.note || 'TodoFlow'}</span>
+                    <DateChipList labels={formatDateChipLabels(getTodoScheduleDateKeys(todo))} className="dashboard-menu-date-chips" />
+                  </button>
+                ))
+              )}
               <button
                 type="button"
                 className="context-menu-item dashboard-menu-entry dashboard-create-todo"
                 onClick={() => openScheduleEditor()}
               >
-                Create {selectedDateCount > 1 ? `${selectedDateCount} TodoFlows` : 'TodoFlow'}
+                Create TodoFlow
               </button>
             </div>
           )}

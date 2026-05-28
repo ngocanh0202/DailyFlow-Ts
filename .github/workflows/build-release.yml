@@ -17,21 +17,21 @@ jobs:
         include:
           - platform: windows
             os: windows-latest
-            command: npm run dist:win
+            command: npm run dist:win -- --publish never
             artifact: release-windows
             paths: |
               release/*.exe
               release/*.yml
           - platform: linux
             os: ubuntu-latest
-            command: npm run dist:linux
+            command: npm run dist:linux -- --publish never
             artifact: release-linux
             paths: |
               release/*.tar.gz
               release/*.yml
           - platform: macos
             os: macos-latest
-            command: npm run dist:mac
+            command: npm run dist:mac -- --publish never
             artifact: release-macos
             paths: |
               release/*.dmg

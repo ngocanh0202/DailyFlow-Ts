@@ -206,6 +206,14 @@
   width: 100%;
 }
 
+.todo-time-editor-delete-button {
+  color: #d94b4b;
+}
+
+.todo-time-editor-delete-button:disabled {
+  color: var(--text-secondary);
+}
+
 .todo-time-editor-move-row {
   display: grid;
   gap: 8px;

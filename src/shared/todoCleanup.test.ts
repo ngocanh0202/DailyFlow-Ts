@@ -71,6 +71,11 @@ describe('todoCleanup', () => {
       note: 'Mixed plan',
       scheduledDates: ['2026-05-17', '2026-05-18', '2026-05-19'],
       scheduledDate: '2026-05-17',
+      dayPlans: {
+        '2026-05-17': { dateKey: '2026-05-17', estimatedTimeTodo: 3600 },
+        '2026-05-18': { dateKey: '2026-05-18', estimatedTimeTodo: 3600 },
+        '2026-05-19': { dateKey: '2026-05-19', estimatedTimeTodo: 3600 },
+      },
       scheduleSlots: [
         { dateKey: '2026-05-17', startTime: '09:00', endTime: '10:00' },
         { dateKey: '2026-05-19', startTime: '09:00', endTime: '10:00' },
@@ -92,6 +97,10 @@ describe('todoCleanup', () => {
         scheduledDate: '2026-05-18',
         scheduledDates: ['2026-05-18', '2026-05-19'],
         scheduleSlots: [{ dateKey: '2026-05-19', startTime: '09:00', endTime: '10:00' }],
+        dayPlans: {
+          '2026-05-18': { dateKey: '2026-05-18', estimatedTimeTodo: 3600 },
+          '2026-05-19': { dateKey: '2026-05-19', estimatedTimeTodo: 3600 },
+        },
       }),
     ]);
     expect(result.archivedSummaries).toEqual([

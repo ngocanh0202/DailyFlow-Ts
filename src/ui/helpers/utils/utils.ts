@@ -1,8 +1,9 @@
 
 export function formatTime(seconds: number) {
-    const hrs = Math.floor(seconds / 3600);
-    const mins = Math.floor((seconds % 3600) / 60);
-    const secs = seconds % 60;
+    const safeSeconds = Number.isFinite(seconds) ? Math.max(0, Math.floor(seconds)) : 0;
+    const hrs = Math.floor(safeSeconds / 3600);
+    const mins = Math.floor((safeSeconds % 3600) / 60);
+    const secs = safeSeconds % 60;
     return [hrs, mins, secs]
         .map(v => v < 10 ? "0" + v : v)
         .join(":");
@@ -30,8 +31,8 @@ export function reorderArray<T>(list: T[], startIndex: number, endIndex: number)
 }
 
 export function calculateProgressWidth(completed: number, total: number): string {
-    if (total === 0) return '0%';
-    const percentage = (completed / total) * 100;
+    if (total <= 0) return '0%';
+    const percentage = Math.max(0, Math.min(100, (completed / total) * 100));
     return `${percentage}%`;
 }
 

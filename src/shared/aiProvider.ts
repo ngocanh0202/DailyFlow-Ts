@@ -56,15 +56,14 @@ function getGeminiText(data: any): string {
 }
 
 function getCustomText(data: any): string {
-  return (
+  const value =
     data.output_text ||
     data.text ||
     data.response ||
     data.output ||
     data.choices?.[0]?.message?.content ||
-    data.choices?.[0]?.text ||
-    JSON.stringify(data, null, 2)
-  );
+    data.choices?.[0]?.text;
+  return typeof value === 'string' ? value : JSON.stringify(value ?? data, null, 2);
 }
 
 export async function requestAiProvider(

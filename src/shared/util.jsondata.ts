@@ -133,7 +133,8 @@ class JsonStore {
   async create(item: any): Promise<any> {
     return this.enqueueWrite(async () => {
       const { items } = await this.readAllNow();
-      const newItem = { id: item?.id || generateId(), ...item };
+      const id = item?.id || generateId();
+      const newItem = { ...item, id };
       items.push(newItem);
       await this.writeAllNow({ items });
       return newItem;

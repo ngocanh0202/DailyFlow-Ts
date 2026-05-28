@@ -46,7 +46,7 @@ const SettingsPanel = forwardRef<SettingsPanelHandle, SettingsPanelProps>(({
   hideSaveButton = false,
   showSuccessMessage = true,
 }, ref) => {
-  const { toggleTheme } = useContext(ThemeContext);
+  const { isDarkTheme, toggleTheme } = useContext(ThemeContext);
   const { success } = useAlert();
   const [settings, setSettings] = useState<AppSettings>(defaultSettings);
   const [isLoadingSettings, setIsLoadingSettings] = useState(true);
@@ -217,7 +217,7 @@ const SettingsPanel = forwardRef<SettingsPanelHandle, SettingsPanelProps>(({
           <label className="settings-panel-toggle">
             <input
               type="checkbox"
-              checked={JSON.parse(localStorage.getItem('isDarkTheme') || 'true')}
+              checked={isDarkTheme}
               onChange={toggleTheme}
               disabled={isBusy}
               className="sr-only peer"

@@ -563,6 +563,12 @@ function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((item) => typeof item === 'string');
 }
 
+function hasNumericAnalysisMetrics(value: Record<string, unknown>): boolean {
+  return ['plannedSeconds', 'actualSeconds', 'completionRate', 'overloadSeconds', 'riskyItemCount'].every(
+    (key) => typeof value[key] === 'number' && Number.isFinite(value[key])
+  );
+}
+
 function parseAiJsonResponse(rawResponse: string, label: string): unknown {
   const trimmed = rawResponse.trim();
   if (trimmed.startsWith('```')) {
@@ -591,6 +597,7 @@ export function parseAiTodoFlowAnalysisResult(rawResponse: string): AiTodoFlowAn
     throw new Error('AI response is missing metrics.');
   }
   if (
+    !hasNumericAnalysisMetrics(value.metrics as Record<string, unknown>) ||
     !Array.isArray(value.risks) ||
     !Array.isArray(value.priorities) ||
     !Array.isArray(value.scheduleSuggestions) ||
@@ -625,6 +632,10 @@ function parseDraftSubtasks(value: unknown): AiTodoFlowDraftTask['subtasks'] {
     .filter((item) => item.title);
 }
 
+function parseFiniteMinutes(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? Math.max(0, Math.floor(value)) : null;
+}
+
 export function parseAiTodoFlowDraftResult(rawResponse: string): AiTodoFlowDraft {
   const parsed = parseAiJsonResponse(rawResponse, 'AI draft');
 
@@ -654,10 +665,14 @@ export function parseAiTodoFlowDraftResult(rawResponse: string): AiTodoFlowDraft
       if (!title) {
         return null;
       }
+      const estimatedMinutes = parseFiniteMinutes(task.estimatedMinutes);
+      if (estimatedMinutes === null) {
+        throw new Error('AI draft response has invalid task estimates.');
+      }
 
       return {
         title,
-        estimatedMinutes: Math.max(0, Math.floor(Number(task.estimatedMinutes) || 0)),
+        estimatedMinutes,
         subtasks: parseDraftSubtasks(task.subtasks),
       };
     })
@@ -668,7 +683,13 @@ export function parseAiTodoFlowDraftResult(rawResponse: string): AiTodoFlowDraft
   }
 
   const taskMinutes = tasks.reduce((total, task) => total + task.estimatedMinutes, 0);
-  const suggestedDurationMinutes = Math.max(0, Math.floor(Number(value.suggestedDurationMinutes) || taskMinutes));
+  const suggestedDurationMinutes =
+    value.suggestedDurationMinutes === undefined
+      ? taskMinutes
+      : parseFiniteMinutes(value.suggestedDurationMinutes);
+  if (suggestedDurationMinutes === null) {
+    throw new Error('AI draft response has invalid suggested duration.');
+  }
 
   return {
     title: value.title.trim(),
@@ -726,9 +747,11 @@ export function createAiTodoFlowPrompt(
   tasks: Task[],
   userRequest: string,
   todayKey = toDateKey(new Date()),
-  outputLanguage: AiOutputLanguage = 'en'
+  outputLanguage: AiOutputLanguage = 'en',
+  analysisContext = ''
 ): string {
   const languageName = getAiOutputLanguageName(outputLanguage);
+  const trimmedAnalysisContext = analysisContext.trim();
   return [
     'You are an AI TodoFlow planner.',
     'Return ONLY valid JSON. Do not wrap it in markdown.',
@@ -743,6 +766,13 @@ export function createAiTodoFlowPrompt(
     `Write all user-facing string values in ${languageName}. Keep JSON keys exactly as specified.`,
     '',
     `User request: ${userRequest.trim() || 'Create a TodoFlow for my next useful work block.'}`,
+    ...(trimmedAnalysisContext
+      ? [
+          '',
+          'Use this previous AI analysis as planning context:',
+          trimmedAnalysisContext,
+        ]
+      : []),
     '',
     'Current TodoFlow data:',
     buildTodoFlowContext(todos, tasks, todayKey),
@@ -1245,7 +1275,7 @@ export function getTodoScheduleMinimumSlotDurationSeconds({
 export function getTodoScheduleDateKeys(todo: TodoFlow): string[] {
   const slotDateKeys = getScheduleSlotDateKeys(todo.scheduleSlots);
   if (slotDateKeys.length > 0) {
-    return slotDateKeys;
+    return uniqueSortedDateKeys([...(todo.scheduledDates || []), ...slotDateKeys]);
   }
   if (todo.scheduledDates && todo.scheduledDates.length > 0) {
     return uniqueSortedDateKeys(todo.scheduledDates);
@@ -1319,6 +1349,24 @@ function cloneTodoTasksWithIds(
   };
 }
 
+function resizeTodoTasksToTotal(todo: TodoFlow, totalSeconds: number): TodoFlow {
+  const taskIds = getTodoNonBreakTaskIds(todo);
+  const distributedEstimates = distributeSecondsByCurrentWeights(totalSeconds, taskIds, todo.tasks);
+  const tasks = { ...todo.tasks };
+  for (const taskId of taskIds) {
+    tasks[taskId] = {
+      ...tasks[taskId],
+      estimatedTime: distributedEstimates[taskId] || 0,
+    };
+  }
+
+  return {
+    ...todo,
+    tasks,
+    taskTotal: taskIds.length,
+  };
+}
+
 export function splitTodoFlowForDate(
   todo: TodoFlow,
   newTodoId: string,
@@ -1336,36 +1384,49 @@ export function splitTodoFlowForDate(
   const originalDuration = getScheduleSlotsDurationSeconds(remainingSlots);
   const detachedDuration = getScheduleSlotsDurationSeconds(detachedSlots);
   const detachedTasks = cloneTodoTasksWithIds(todo, createTaskId);
-  const originalTaskTotal = getTodoTaskEstimatedSeconds(todo);
-  const detachedTaskTotal = detachedTasks.taskIds.reduce((total, taskId) => {
-    const task = detachedTasks.tasks[taskId];
-    return task && !task.isTaskBreak ? total + Math.max(0, Math.floor(task.estimatedTime || 0)) : total;
-  }, 0);
+  const originalTargetDuration = Math.max(0, Math.floor(originalDuration ?? todo.estimatedTimeTodo));
+  const detachedTargetDuration = Math.max(0, Math.floor(detachedDuration ?? todo.estimatedTimeTodo));
 
-  const originalTodo = {
+  const originalTodo = resizeTodoTasksToTotal({
     ...applyTodoScheduleDateKeys(todo, remainingDateKeys),
     scheduleSlots: remainingSlots.length > 0 ? remainingSlots.map((slot) => ({ ...slot })) : undefined,
-    estimatedTimeTodo: Math.max(originalDuration ?? todo.estimatedTimeTodo, originalTaskTotal),
+    estimatedTimeTodo: originalTargetDuration,
     timer: null,
     lastNotifiedDate: undefined,
-  };
+  }, originalTargetDuration);
 
-  const detachedTodo = {
+  const detachedTodo = resizeTodoTasksToTotal({
     ...todo,
     id: newTodoId,
     scheduledDate: dateKey,
     scheduledDates: undefined,
     scheduleSlots: detachedSlots.length > 0 ? detachedSlots.map((slot) => ({ ...slot })) : undefined,
-    estimatedTimeTodo: Math.max(detachedDuration ?? todo.estimatedTimeTodo, detachedTaskTotal),
+    estimatedTimeTodo: detachedTargetDuration,
     tasks: detachedTasks.tasks,
     taskIds: detachedTasks.taskIds,
     currentTaskId: detachedTasks.currentTaskId,
     dayPlans: undefined,
     timer: null,
     lastNotifiedDate: undefined,
-  };
+  }, detachedTargetDuration);
 
   return { originalTodo, detachedTodo };
+}
+
+export function filterTodoFlowsAssignableToDateSelection(
+  todos: TodoFlow[],
+  selectedDateKeys: string[],
+  searchText: string
+): TodoFlow[] {
+  const selectedDateCount = uniqueSortedDateKeys(selectedDateKeys).length;
+  const query = searchText.trim().toLowerCase();
+  if (selectedDateCount === 0) {
+    return [];
+  }
+
+  return dedupeById(todos).filter((todo) => {
+    return getTodoScheduleDateKeys(todo).length === selectedDateCount && todoMatchesSearch(todo, query);
+  });
 }
 
 function todoMatchesSearch(todo: TodoFlow, query: string): boolean {
@@ -2022,7 +2083,7 @@ function applyScheduleSlot(slots: ScheduleSlot[] | undefined, nextSlot: Schedule
 
 export function setTodoScheduleSlot(todo: TodoFlow, slot: ScheduleSlot): TodoFlow {
   const scheduleSlots = applyScheduleSlot(todo.scheduleSlots, slot);
-  const dateKeys = getScheduleSlotDateKeys(scheduleSlots);
+  const dateKeys = getTodoScheduleDateKeys({ ...todo, scheduleSlots });
   const currentEstimate = Math.max(0, Math.floor(todo.estimatedTimeTodo || 0));
   const slotDuration = secondsBetweenTimeStrings(slot.startTime, slot.endTime);
   const taskTotal = getTodoTaskEstimatedSeconds(todo);

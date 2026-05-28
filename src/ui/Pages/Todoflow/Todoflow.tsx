@@ -379,9 +379,13 @@ const Todoflow = () => {
     <div className="todoflow-page h-full">
       <div className="todoflow-header" >
         <div className='todoflow-title-group'>
-          <button className='btn btn-icon todoflow-nav-button' title="Back to dashboard" onClick={() =>{
+          <button className='btn btn-icon todoflow-nav-button' title="Back to dashboard" onClick={async () =>{
             dispatch(setStopTimer());
-            window.electronAPI.setWindowAlwaysOnTop('main', false);
+            try {
+              await window.electronAPI.setWindowAlwaysOnTop('main', false);
+            } catch (error) {
+              console.error('Failed to disable always-on-top:', error);
+            }
             navigate('/dashboard');
           }}><IoHomeOutline /></button>
           <div className="todoflow-title-copy">

@@ -460,7 +460,13 @@ const ScheduleEditor = () => {
           <p>{title}</p>
         </div>
         <div className="schedule-editor-actions no-drag">
-          <button className="btn btn-secondary schedule-editor-button" onClick={() => window.electronAPI.closeWindow('schedule-editor')}>
+          <button className="btn btn-secondary schedule-editor-button" onClick={async () => {
+            try {
+              await window.electronAPI.closeWindow('schedule-editor');
+            } catch (error) {
+              console.error('Failed to close schedule editor:', error);
+            }
+          }}>
             <IoClose />
             Close
           </button>

@@ -14,6 +14,7 @@ import {
   buildMonthDays,
   formatDateChipLabels,
   formatScheduleSlotChipLabels,
+  getPersistableTodoDateState,
   getTodoEstimatedSeconds,
   getTodoForDate,
   getTodoScheduleDateKeys,
@@ -83,8 +84,10 @@ const TodoflowSettings = () => {
     setRangeStartDateKey(assignedDateKeys.find((dateKey) => !isPastDateKey(dateKey)) || todayKey);
   }, [assignedDateKeys.join('|'), todayKey]);
 
-  const persistTodoFlow = async (todo: TodoFlow) => {
-    const persistableTodo = withoutRuntimeTimer(todo);
+  const persistTodoFlow = async (todo: TodoFlow, scopedDateKey?: string) => {
+    const persistableTodo = scopedDateKey
+      ? getPersistableTodoDateState(withoutRuntimeTimer(getTodoForDate(todo, scopedDateKey)), scopedDateKey)
+      : withoutRuntimeTimer(todo);
     await window.electronAPI.todoUpsert(persistableTodo);
     for (const taskId of persistableTodo.taskIds) {
       const task = persistableTodo.tasks[taskId];
@@ -105,6 +108,9 @@ const TodoflowSettings = () => {
       await persistTodoFlow(nextTodo);
       setActualTimeInputValue(formatTime(seconds));
       setTimeError('');
+    } catch (error) {
+      console.error('Failed to save actual time:', error);
+      setTimeError('Failed to save actual time');
     } finally {
       setPendingAction(null);
     }
@@ -122,7 +128,7 @@ const TodoflowSettings = () => {
 
     try {
       setPendingAction('Saving estimated time');
-      const latestTodos = await window.electronAPI.todoGetAll().catch(() => []);
+      const latestTodos = await window.electronAPI.todoGetAll();
       const resized = resizeTodoFlowScheduleDuration(activeTodoFlow, seconds, latestTodos);
       if (!resized.ok) {
         setTimeError(resized.reason);
@@ -136,6 +142,10 @@ const TodoflowSettings = () => {
       await persistTodoFlow(nextTodo);
       setEstimatedTimeInputValue(formatTime(seconds));
       setTimeError('');
+    } catch (error) {
+      console.error('Failed to save estimated time:', error);
+      setTimeError('Failed to save estimated time');
+      setEstimatedTimeInputValue(formatTime(estimatedTimeTodo));
     } finally {
       setPendingAction(null);
     }
@@ -158,13 +168,16 @@ const TodoflowSettings = () => {
 
     try {
       setPendingAction('Opening schedule editor');
-      await persistTodoFlow(todoFlow);
+      await persistTodoFlow(todoFlow, activeDateKey);
       await window.electronAPI.openScheduleEditorWindow({
         todoId: todoFlow.id,
         dateKeys: getTodoScheduleDateKeys(todoFlow),
         returnTo: '/todoflow-setting',
         activeDateKey,
       });
+    } catch (error) {
+      console.error('Failed to open schedule editor:', error);
+      info('Failed to open schedule editor');
     } finally {
       setPendingAction(null);
     }
@@ -183,6 +196,9 @@ const TodoflowSettings = () => {
         returnTo: '/todoflow-setting',
         activeDateKey,
       });
+    } catch (error) {
+      console.error('Failed to open time editor:', error);
+      info('Failed to open time editor');
     } finally {
       setPendingAction(null);
     }
@@ -228,13 +244,16 @@ const TodoflowSettings = () => {
     try {
       setPendingAction('Assigning dates');
       setIsAssigningDates(false);
-      await persistTodoFlow(todoFlow);
+      await persistTodoFlow(todoFlow, selectedAssignDateKeys[0]);
       await window.electronAPI.openScheduleEditorWindow({
         todoId: todoFlow.id,
         dateKeys: selectedAssignDateKeys,
         returnTo: '/todoflow-setting',
         activeDateKey: selectedAssignDateKeys[0],
       });
+    } catch (error) {
+      console.error('Failed to assign dates:', error);
+      info('Failed to assign dates');
     } finally {
       setPendingAction(null);
     }
@@ -277,6 +296,9 @@ const TodoflowSettings = () => {
       setPendingAction('Saving settings');
       await settingsPanelRef.current?.saveSettings();
       navigate('/todoflow');
+    } catch (error) {
+      console.error('Failed to save settings:', error);
+      info('Failed to save settings');
     } finally {
       setPendingAction(null);
     }

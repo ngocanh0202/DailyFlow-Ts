@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { FaCaretDown, FaCaretUp } from 'react-icons/fa';
-import { IoAddCircleOutline, IoClose, IoSaveOutline } from 'react-icons/io5';
+import { IoAddCircleOutline, IoClose, IoSaveOutline, IoTrashOutline } from 'react-icons/io5';
 import { TaskStatus } from '~/enums/TaskStatus.Type.enum';
 import { formatTime, generateId, parseTime } from '~/ui/helpers/utils/utils';
 import {
@@ -214,6 +214,36 @@ const TodoTimeEditor = () => {
     setTodo(reorderTodoTaskIds(todo, fromIndex, toIndex));
   };
 
+  const deleteSelectedTask = () => {
+    if (!todo || !selectedTaskId || taskIds.length <= 1) return;
+    const selectedIndex = taskIds.indexOf(selectedTaskId);
+    const nextTaskIds = todo.taskIds.filter((taskId) => taskId !== selectedTaskId);
+    const nextTasks = { ...todo.tasks };
+    delete nextTasks[selectedTaskId];
+    const visibleTaskIds = nextTaskIds.filter((taskId) => nextTasks[taskId] && !nextTasks[taskId].isTaskBreak);
+    const distributedEstimates = visibleTaskIds.length > 0
+      ? Math.floor(totalSeconds / visibleTaskIds.length)
+      : 0;
+    let remainder = totalSeconds - distributedEstimates * visibleTaskIds.length;
+    visibleTaskIds.forEach((taskId) => {
+      nextTasks[taskId] = {
+        ...nextTasks[taskId],
+        estimatedTime: distributedEstimates + (remainder > 0 ? 1 : 0),
+      };
+      remainder = Math.max(0, remainder - 1);
+    });
+    const nextSelectedTaskId = visibleTaskIds[Math.min(selectedIndex, visibleTaskIds.length - 1)] || null;
+    setTodo({
+      ...todo,
+      taskIds: nextTaskIds,
+      tasks: nextTasks,
+      taskTotal: visibleTaskIds.length,
+      currentTaskId: todo.currentTaskId === selectedTaskId ? nextSelectedTaskId || undefined : todo.currentTaskId,
+    });
+    setSelectedTaskId(nextSelectedTaskId);
+    setTimeInputValue(nextSelectedTaskId ? formatTime(nextTasks[nextSelectedTaskId].estimatedTime || 0) : '');
+  };
+
   const saveAllocation = async () => {
     if (!todo || isSaving) return;
     try {
@@ -247,7 +277,13 @@ const TodoTimeEditor = () => {
           <p>{todo.note || 'Untitled TodoFlow'}</p>
         </div>
         <div className="todo-time-editor-actions no-drag">
-          <button className="btn btn-secondary todo-time-editor-button" onClick={() => window.electronAPI.closeWindow('todo-time-editor')}>
+          <button className="btn btn-secondary todo-time-editor-button" onClick={async () => {
+            try {
+              await window.electronAPI.closeWindow('todo-time-editor');
+            } catch (error) {
+              console.error('Failed to close time editor:', error);
+            }
+          }}>
             <IoClose />
             Close
           </button>
@@ -375,6 +411,14 @@ const TodoTimeEditor = () => {
           </button>
           <button className="btn btn-secondary todo-time-editor-panel-button" onClick={normalize}>
             Normalize
+          </button>
+          <button
+            className="btn btn-secondary todo-time-editor-panel-button todo-time-editor-delete-button"
+            onClick={deleteSelectedTask}
+            disabled={!selectedTask || taskIds.length <= 1}
+          >
+            <IoTrashOutline />
+            Delete Task
           </button>
           <div className="todo-time-editor-move-row">
             <button className="btn btn-secondary todo-time-editor-panel-button" onClick={() => moveSelectedTask('up')}>
