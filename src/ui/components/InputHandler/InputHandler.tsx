@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useAppDispatch, useAppSelector } from "~/ui/store/hooks";
-import { insertNewTaskAtCurrentPosition, setTodoStatus, removeTask, updateTask, addSubTask } from "~/ui/store/todo/todoSlice";
+import { insertNewTaskAtCurrentPosition, setTodoStatus, removeTask, addSubTask } from "~/ui/store/todo/todoSlice";
 import { TodoStatus } from "~/enums/TodoStatus.Type.enum";
 import { generateId } from "~/ui/helpers/utils/utils";
 
@@ -42,7 +42,7 @@ const InputHandler = () => {
             
             if (cmdOrCtrl && event.shiftKey && event.key === 'F') {
                 event.preventDefault();
-                if (todoFlow.timer) {
+                if (todoFlow.timer != null) {
                     dispatch(setTodoStatus(TodoStatus.START_ON_PROGRESS));
                 }
             }
@@ -79,7 +79,7 @@ const InputHandler = () => {
         return () => {
             document.removeEventListener('keydown', handleKeyDown);
         };
-    }, [dispatch, todoFlow.timer, todoFlow.taskIds.length, navigate, location.pathname]);
+    }, [dispatch, navigate, location.pathname, todoFlow]);
     
     return null;
 };

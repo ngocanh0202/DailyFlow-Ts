@@ -52,6 +52,187 @@ export interface TodoFlowAnalytics {
   actualSeconds: number;
 }
 
+export type AiAnalysisMode = 'today_plan' | 'workload_review' | 'estimate_review';
+export type AiOutputLanguage = 'vi' | 'en' | 'ja';
+export type AiHistoryKind = 'analysis' | 'draft';
+export type AiAnalysisSituation =
+  | 'today_schedule'
+  | 'empty_today_with_candidates'
+  | 'standalone_tasks_only'
+  | 'history_only'
+  | 'no_data';
+
+export interface AiTodoFlowAnalysis {
+  summary: string;
+  metrics: {
+    plannedSeconds: number;
+    actualSeconds: number;
+    completionRate: number;
+    overloadSeconds: number;
+    riskyItemCount: number;
+  };
+  risks: Array<{
+    severity: 'low' | 'medium' | 'high';
+    title: string;
+    reason: string;
+    itemIds: string[];
+  }>;
+  priorities: Array<{
+    title: string;
+    reason: string;
+    estimatedSeconds?: number;
+    itemIds: string[];
+  }>;
+  scheduleSuggestions: Array<{
+    action: 'move' | 'split' | 'shorten' | 'add_break' | 'clarify' | 'create_todoflow';
+    title: string;
+    reason: string;
+    itemIds: string[];
+  }>;
+  estimationInsights: string[];
+  actionPlan: string[];
+}
+
+export interface AiTodoFlowDraftTask {
+  title: string;
+  estimatedMinutes: number;
+  subtasks: Array<{
+    title: string;
+    completed: boolean;
+  }>;
+}
+
+export interface AiTodoFlowDraft {
+  title: string;
+  suggestedDurationMinutes: number;
+  tasks: AiTodoFlowDraftTask[];
+}
+
+export interface AiAnalysisHistoryEntry {
+  id: string;
+  kind?: AiHistoryKind;
+  createdAt: string;
+  provider: string;
+  model: string;
+  mode?: AiAnalysisMode;
+  outputLanguage: AiOutputLanguage;
+  userRequest: string;
+  summary: string;
+  rawResponse: string;
+  result: AiTodoFlowAnalysis | AiTodoFlowDraft;
+}
+
+export interface AiAnalysisContextOptions {
+  todayKey?: string;
+  mode?: AiAnalysisMode;
+  activeLimit?: number;
+  overdueLimit?: number;
+  upcomingLimit?: number;
+  unscheduledLimit?: number;
+  archiveLimit?: number;
+  standaloneTaskLimit?: number;
+  taskLimit?: number;
+}
+
+export interface AiCompactTask {
+  id: string;
+  title: string;
+  status: TaskStatus;
+  estimatedSeconds: number;
+  actualSeconds: number;
+  isBreak: boolean;
+}
+
+export interface AiCompactTodoFlow {
+  id: string;
+  note: string;
+  status: TodoStatus;
+  dateKeys: string[];
+  scheduleSlots: ScheduleSlot[];
+  estimatedSeconds: number;
+  actualSeconds: number;
+  completedTasks: number;
+  totalTasks: number;
+  tasks: AiCompactTask[];
+  omittedTaskCount: number;
+}
+
+export interface AiTodoFlowAnalysisContext {
+  todayKey: string;
+  mode: AiAnalysisMode;
+  situation: AiAnalysisSituation;
+  aggregateMetrics: TodoFlowAnalytics & {
+    completionRate: number;
+    zeroEstimateTaskCount: number;
+    emptyTitleTaskCount: number;
+  };
+  todayTodoFlows: AiCompactTodoFlow[];
+  activeTodoFlows: AiCompactTodoFlow[];
+  overdueTodoFlows: AiCompactTodoFlow[];
+  upcomingTodoFlows: AiCompactTodoFlow[];
+  unscheduledTodoFlows: AiCompactTodoFlow[];
+  standaloneTasks: AiCompactTask[];
+  recentArchivedTodoFlows: ArchivedTodoSummary[];
+  omittedCounts: {
+    activeTodoFlows: number;
+    overdueTodoFlows: number;
+    upcomingTodoFlows: number;
+    unscheduledTodoFlows: number;
+    standaloneTasks: number;
+    recentArchivedTodoFlows: number;
+  };
+}
+
+export function createAiAnalysisHistoryEntry(input: {
+  id: string;
+  createdAt: string;
+  provider: string;
+  model: string;
+  mode: AiAnalysisMode;
+  outputLanguage: AiOutputLanguage;
+  userRequest: string;
+  rawResponse: string;
+  result: AiTodoFlowAnalysis;
+}): AiAnalysisHistoryEntry {
+  return {
+    id: input.id,
+    kind: 'analysis',
+    createdAt: input.createdAt,
+    provider: input.provider,
+    model: input.model,
+    mode: input.mode,
+    outputLanguage: input.outputLanguage,
+    userRequest: input.userRequest.trim(),
+    summary: input.result.summary,
+    rawResponse: input.rawResponse,
+    result: input.result,
+  };
+}
+
+export function createAiTodoFlowDraftHistoryEntry(input: {
+  id: string;
+  createdAt: string;
+  provider: string;
+  model: string;
+  outputLanguage: AiOutputLanguage;
+  userRequest: string;
+  rawResponse: string;
+  result: AiTodoFlowDraft;
+}): AiAnalysisHistoryEntry {
+  return {
+    id: input.id,
+    kind: 'draft',
+    createdAt: input.createdAt,
+    provider: input.provider,
+    model: input.model,
+    outputLanguage: input.outputLanguage,
+    userRequest: input.userRequest.trim(),
+    summary: input.result.title,
+    rawResponse: input.rawResponse,
+    result: input.result,
+  };
+}
+
 function formatSecondsForPrompt(seconds: number): string {
   const safeSeconds = Math.max(0, Math.floor(seconds));
   const hours = Math.floor(safeSeconds / 3600);
@@ -59,12 +240,169 @@ function formatSecondsForPrompt(seconds: number): string {
   return `${hours}h ${minutes}m`;
 }
 
+function addDaysToDateKey(dateKey: string, days: number): string {
+  const date = parseDateKey(dateKey);
+  date.setDate(date.getDate() + days);
+  return toDateKey(date);
+}
+
+function countRiskyTasks(todos: TodoFlow[], tasks: Task[]): { zeroEstimateTaskCount: number; emptyTitleTaskCount: number } {
+  const todoTasks = todos.flatMap((todo) => todo.taskIds.map((taskId) => todo.tasks[taskId]).filter(Boolean));
+  const allTasks = [...todoTasks, ...tasks].filter((task) => !task.isTaskBreak);
+
+  return allTasks.reduce(
+    (counts, task) => {
+      counts.zeroEstimateTaskCount += (task.estimatedTime || 0) <= 0 ? 1 : 0;
+      counts.emptyTitleTaskCount += task.title.trim() ? 0 : 1;
+      return counts;
+    },
+    { zeroEstimateTaskCount: 0, emptyTitleTaskCount: 0 }
+  );
+}
+
+function compactTask(task: Task): AiCompactTask {
+  return {
+    id: task.id,
+    title: task.title || '',
+    status: task.status,
+    estimatedSeconds: Math.max(0, Math.floor(task.estimatedTime || 0)),
+    actualSeconds: Math.max(0, Math.floor(task.actualTime || 0)),
+    isBreak: Boolean(task.isTaskBreak),
+  };
+}
+
+export function getTodoEstimatedSeconds(todo: TodoFlow): number {
+  return Math.max(0, Math.floor(todo.estimatedTimeTodo || 0), getTodoTaskEstimatedSeconds(todo));
+}
+
+function compactTodoFlow(todo: TodoFlow, taskLimit: number): AiCompactTodoFlow {
+  const taskItems = todo.taskIds.map((taskId) => todo.tasks[taskId]).filter(Boolean);
+  const compactedTasks = taskItems.slice(0, taskLimit).map(compactTask);
+
+  return {
+    id: todo.id,
+    note: todo.note || '',
+    status: todo.status,
+    dateKeys: getTodoScheduleDateKeys(todo),
+    scheduleSlots: todo.scheduleSlots || [],
+    estimatedSeconds: getTodoEstimatedSeconds(todo),
+    actualSeconds: Math.max(0, Math.floor(todo.actualTimeTodo || 0)),
+    completedTasks: Math.max(0, Math.floor(todo.taskCompleted || 0)),
+    totalTasks: Math.max(0, Math.floor(todo.taskTotal || taskItems.filter((task) => !task.isTaskBreak).length)),
+    tasks: compactedTasks,
+    omittedTaskCount: Math.max(0, taskItems.length - compactedTasks.length),
+  };
+}
+
+function takeWithOmitted<T>(items: T[], limit: number): { items: T[]; omitted: number } {
+  const safeLimit = Math.max(0, Math.floor(limit));
+  return {
+    items: items.slice(0, safeLimit),
+    omitted: Math.max(0, items.length - safeLimit),
+  };
+}
+
+function determineAiAnalysisSituation(
+  todayTodoFlows: TodoFlow[],
+  activeTodoFlows: TodoFlow[],
+  overdueTodoFlows: TodoFlow[],
+  upcomingTodoFlows: TodoFlow[],
+  unscheduledTodoFlows: TodoFlow[],
+  standaloneTasks: Task[],
+  archivedTodos: ArchivedTodoSummary[]
+): AiAnalysisSituation {
+  if (todayTodoFlows.length > 0) return 'today_schedule';
+  if (activeTodoFlows.length > 0 || overdueTodoFlows.length > 0 || upcomingTodoFlows.length > 0 || unscheduledTodoFlows.length > 0) {
+    return 'empty_today_with_candidates';
+  }
+  if (standaloneTasks.length > 0) return 'standalone_tasks_only';
+  if (archivedTodos.length > 0) return 'history_only';
+  return 'no_data';
+}
+
+export function hasAiTodoFlowContextData(
+  todos: TodoFlow[],
+  tasks: Task[],
+  archivedTodos: ArchivedTodoSummary[] = []
+): boolean {
+  return todos.length > 0 || tasks.length > 0 || archivedTodos.length > 0;
+}
+
+export function buildAiTodoFlowAnalysisContext(
+  todos: TodoFlow[],
+  tasks: Task[],
+  archivedTodos: ArchivedTodoSummary[] = [],
+  options: AiAnalysisContextOptions = {}
+): AiTodoFlowAnalysisContext {
+  const todayKey = options.todayKey || toDateKey(new Date());
+  const mode = options.mode || 'today_plan';
+  const taskLimit = options.taskLimit ?? 8;
+  const next7DayKey = addDaysToDateKey(todayKey, 7);
+  const stats = getTodoFlowAnalytics(todos, tasks, todayKey);
+  const riskyTaskCounts = countRiskyTasks(todos, tasks);
+  const completionRate = stats.totalTasks > 0 ? Math.round((stats.completedTasks / stats.totalTasks) * 100) : 0;
+  const todayTodoFlows = todos.filter((todo) => getTodoScheduleDateKeys(todo).includes(todayKey));
+  const activeTodoFlows = todos.filter((todo) => hasTodoFlowStarted(todo) && !isTodoCompleted(todo));
+  const overdueTodoFlows = todos.filter((todo) => {
+    const dateKeys = getTodoScheduleDateKeys(todo);
+    return !isTodoCompleted(todo) && dateKeys.some((dateKey) => dateKey < todayKey);
+  });
+  const futureTodoFlows = todos.filter((todo) => getTodoScheduleDateKeys(todo).some((dateKey) => dateKey > todayKey));
+  const upcomingTodoFlows = todos.filter((todo) => {
+    const dateKeys = getTodoScheduleDateKeys(todo);
+    return dateKeys.some((dateKey) => dateKey > todayKey && dateKey <= next7DayKey);
+  });
+  const unscheduledTodoFlows = todos.filter((todo) => getTodoScheduleDateKeys(todo).length === 0);
+  const limitedActive = takeWithOmitted(activeTodoFlows, options.activeLimit ?? 5);
+  const limitedOverdue = takeWithOmitted(overdueTodoFlows, options.overdueLimit ?? 5);
+  const limitedUpcoming = takeWithOmitted(upcomingTodoFlows, options.upcomingLimit ?? 10);
+  const limitedUnscheduled = takeWithOmitted(unscheduledTodoFlows, options.unscheduledLimit ?? 10);
+  const limitedStandaloneTasks = takeWithOmitted(tasks.filter((task) => !task.isTaskBreak), options.standaloneTaskLimit ?? 10);
+  const recentArchives = [...archivedTodos].sort((a, b) => b.archivedAt.localeCompare(a.archivedAt));
+  const limitedArchives = takeWithOmitted(recentArchives, options.archiveLimit ?? 8);
+  const situation = determineAiAnalysisSituation(
+    todayTodoFlows,
+    activeTodoFlows,
+    overdueTodoFlows,
+    upcomingTodoFlows,
+    unscheduledTodoFlows,
+    tasks,
+    archivedTodos
+  );
+
+  return {
+    todayKey,
+    mode,
+    situation,
+    aggregateMetrics: {
+      ...stats,
+      completionRate,
+      ...riskyTaskCounts,
+    },
+    todayTodoFlows: todayTodoFlows.map((todo) => compactTodoFlow(todo, taskLimit)),
+    activeTodoFlows: limitedActive.items.map((todo) => compactTodoFlow(todo, taskLimit)),
+    overdueTodoFlows: limitedOverdue.items.map((todo) => compactTodoFlow(todo, taskLimit)),
+    upcomingTodoFlows: limitedUpcoming.items.map((todo) => compactTodoFlow(todo, taskLimit)),
+    unscheduledTodoFlows: limitedUnscheduled.items.map((todo) => compactTodoFlow(todo, taskLimit)),
+    standaloneTasks: limitedStandaloneTasks.items.map(compactTask),
+    recentArchivedTodoFlows: limitedArchives.items,
+    omittedCounts: {
+      activeTodoFlows: limitedActive.omitted,
+      overdueTodoFlows: limitedOverdue.omitted,
+      upcomingTodoFlows: Math.max(0, futureTodoFlows.length - limitedUpcoming.items.length),
+      unscheduledTodoFlows: limitedUnscheduled.omitted,
+      standaloneTasks: limitedStandaloneTasks.omitted,
+      recentArchivedTodoFlows: limitedArchives.omitted,
+    },
+  };
+}
+
 function buildTodoFlowContext(todos: TodoFlow[], tasks: Task[], todayKey: string): string {
   const stats = getTodoFlowAnalytics(todos, tasks, todayKey);
   const completionRate = stats.totalTasks > 0 ? Math.round((stats.completedTasks / stats.totalTasks) * 100) : 0;
   const todoLines = todos.slice(0, 12).map((todo) => {
     const dateText = formatDateKeyList(getTodoScheduleDateKeys(todo), 'unscheduled');
-    return `- TodoFlow: ${todo.note || 'Untitled'} | dates: ${dateText} | tasks: ${todo.taskCompleted}/${todo.taskTotal} | planned: ${formatSecondsForPrompt(todo.estimatedTimeTodo || 0)} | actual: ${formatSecondsForPrompt(todo.actualTimeTodo || 0)}`;
+    return `- TodoFlow: ${todo.note || 'Untitled'} | dates: ${dateText} | tasks: ${todo.taskCompleted}/${todo.taskTotal} | planned: ${formatSecondsForPrompt(getTodoEstimatedSeconds(todo))} | actual: ${formatSecondsForPrompt(todo.actualTimeTodo || 0)}`;
   });
   const taskLines = tasks.slice(0, 12).map((task) => {
     const dateText = formatDateKeyList(getTaskScheduleDateKeys(task), 'unscheduled');
@@ -90,12 +428,124 @@ function buildTodoFlowContext(todos: TodoFlow[], tasks: Task[], todayKey: string
   ].join('\n');
 }
 
+function buildArchivedTodoFlowContext(archivedTodos: ArchivedTodoSummary[] = []): string {
+  const archiveLines = archivedTodos.slice(0, 12).map((todo) => {
+    const taskLines = todo.tasks.slice(0, 8).map((task) => {
+      const ratio = Math.round((task.timeRatio || 0) * 100);
+      return `  - Task: ${task.title || 'Untitled'} | status: ${task.status} | completed: ${task.completed ? 'yes' : 'no'} | planned: ${formatSecondsForPrompt(task.estimatedTime || 0)} | actual: ${formatSecondsForPrompt(task.actualTime || 0)} | ratio: ${ratio}%`;
+    });
+    const slotText = todo.scheduleSlots.length > 0 ? formatScheduleSlotChipLabels(todo.scheduleSlots).join(' | ') : 'No slots';
+    return [
+      `- Archived TodoFlow: ${todo.note || 'Untitled'} | removed dates: ${formatDateKeyList(todo.removedDateKeys, 'unknown')} | slots: ${slotText} | tasks: ${todo.taskCompleted}/${todo.taskTotal} | planned: ${formatSecondsForPrompt(todo.totalEstimatedTime || 0)} | actual: ${formatSecondsForPrompt(todo.totalActualTime || 0)}`,
+      taskLines.length > 0 ? taskLines.join('\n') : '  - No tasks',
+    ].join('\n');
+  });
+
+  return [
+    '',
+    'Archived TodoFlows:',
+    archiveLines.length > 0 ? archiveLines.join('\n') : '- None',
+  ].join('\n');
+}
+
+function describeAiAnalysisSituation(situation: AiAnalysisSituation): string {
+  if (situation === 'today_schedule') {
+    return 'The user has TodoFlows scheduled for today. Analyze today first, then use other groups only as supporting context.';
+  }
+  if (situation === 'empty_today_with_candidates') {
+    return 'The user has no TodoFlow scheduled for today. Do not pretend there is a schedule today. Recommend what to pull into today from active, overdue, upcoming, or unscheduled work.';
+  }
+  if (situation === 'standalone_tasks_only') {
+    return 'The user has no TodoFlow candidates, but has standalone tasks. Recommend whether to work from these tasks or create a TodoFlow.';
+  }
+  if (situation === 'history_only') {
+    return 'The user has no current work data. Use recent archived TodoFlows only for planning patterns, not as work scheduled for today.';
+  }
+  return 'The user has no TodoFlow, standalone task, or archive data. Return no-data guidance and suggest creating a first TodoFlow.';
+}
+
+function getAiOutputLanguageName(language: AiOutputLanguage): string {
+  if (language === 'vi') return 'Vietnamese';
+  if (language === 'ja') return 'Japanese';
+  return 'English';
+}
+
+function createStructuredAiTodoFlowAnalysisPrompt(
+  context: AiTodoFlowAnalysisContext,
+  userRequest: string,
+  outputLanguage: AiOutputLanguage = 'en'
+): string {
+  const languageName = getAiOutputLanguageName(outputLanguage);
+  return [
+    'SYSTEM ROLE:',
+    'You are an AI productivity analyst for a TodoFlow desktop app.',
+    '',
+    'OUTPUT RULES:',
+    'Return ONLY valid JSON. Do not return markdown. Do not wrap the JSON in code fences. Do not explain outside JSON.',
+    'Use only the provided context. If data is missing or omitted, mention uncertainty instead of inventing details.',
+    'Do not modify data. Only suggest actions.',
+    '',
+    'Return this JSON shape:',
+    '{',
+    '  "summary": "string",',
+    '  "metrics": {',
+    '    "plannedSeconds": number,',
+    '    "actualSeconds": number,',
+    '    "completionRate": number,',
+    '    "overloadSeconds": number,',
+    '    "riskyItemCount": number',
+    '  },',
+    '  "risks": [{ "severity": "low | medium | high", "title": "string", "reason": "string", "itemIds": ["string"] }],',
+    '  "priorities": [{ "title": "string", "reason": "string", "estimatedSeconds": number, "itemIds": ["string"] }],',
+    '  "scheduleSuggestions": [{ "action": "move | split | shorten | add_break | clarify | create_todoflow", "title": "string", "reason": "string", "itemIds": ["string"] }],',
+    '  "estimationInsights": ["string"],',
+    '  "actionPlan": ["string"]',
+    '}',
+    '',
+    `Current date: ${context.todayKey}`,
+    `Analysis mode: ${context.mode}`,
+    `Output language: ${languageName}`,
+    `Write all user-facing string values in ${languageName}. Keep JSON keys exactly as specified.`,
+    `Situation: ${context.situation}`,
+    describeAiAnalysisSituation(context.situation),
+    '',
+    `User request: ${userRequest.trim() || 'Analyze my TodoFlow data and recommend what to do next.'}`,
+    '',
+    'DATA SUMMARY:',
+    JSON.stringify(context, null, 2),
+  ].join('\n');
+}
+
+export function createAiTodoFlowAnalysisPrompt(
+  context: AiTodoFlowAnalysisContext,
+  userRequest: string,
+  outputLanguage?: AiOutputLanguage
+): string;
 export function createAiTodoFlowAnalysisPrompt(
   todos: TodoFlow[],
   tasks: Task[],
   userRequest: string,
-  todayKey = toDateKey(new Date())
+  todayKey?: string,
+  archivedTodos?: ArchivedTodoSummary[]
+): string;
+export function createAiTodoFlowAnalysisPrompt(
+  contextOrTodos: AiTodoFlowAnalysisContext | TodoFlow[],
+  tasksOrUserRequest: Task[] | string,
+  userRequestOrTodayKey: string | AiOutputLanguage = '',
+  todayKey = toDateKey(new Date()),
+  archivedTodos: ArchivedTodoSummary[] = []
 ): string {
+  if (!Array.isArray(contextOrTodos)) {
+    return createStructuredAiTodoFlowAnalysisPrompt(
+      contextOrTodos,
+      String(tasksOrUserRequest || ''),
+      (userRequestOrTodayKey || 'en') as AiOutputLanguage
+    );
+  }
+
+  const todos = contextOrTodos;
+  const tasks = Array.isArray(tasksOrUserRequest) ? tasksOrUserRequest : [];
+  const userRequest = userRequestOrTodayKey;
   return [
     'You are an AI productivity analyst for a TodoFlow app.',
     'Analyze the user data below and answer with practical scheduling, workload, and focus-time insights.',
@@ -105,22 +555,224 @@ export function createAiTodoFlowAnalysisPrompt(
     '',
     'TodoFlow data:',
     buildTodoFlowContext(todos, tasks, todayKey),
+    buildArchivedTodoFlowContext(archivedTodos),
   ].join('\n');
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((item) => typeof item === 'string');
+}
+
+function hasNumericAnalysisMetrics(value: Record<string, unknown>): boolean {
+  return ['plannedSeconds', 'actualSeconds', 'completionRate', 'overloadSeconds', 'riskyItemCount'].every(
+    (key) => typeof value[key] === 'number' && Number.isFinite(value[key])
+  );
+}
+
+function parseAiJsonResponse(rawResponse: string, label: string): unknown {
+  const trimmed = rawResponse.trim();
+  if (trimmed.startsWith('```')) {
+    throw new Error(`${label} response must be raw JSON, not markdown.`);
+  }
+
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    throw new Error(`${label} response must be valid JSON.`);
+  }
+}
+
+export function parseAiTodoFlowAnalysisResult(rawResponse: string): AiTodoFlowAnalysis {
+  const parsed = parseAiJsonResponse(rawResponse, 'AI');
+
+  if (!parsed || typeof parsed !== 'object') {
+    throw new Error('AI response JSON must be an object.');
+  }
+
+  const value = parsed as Partial<AiTodoFlowAnalysis>;
+  if (typeof value.summary !== 'string') {
+    throw new Error('AI response is missing summary.');
+  }
+  if (!value.metrics || typeof value.metrics !== 'object') {
+    throw new Error('AI response is missing metrics.');
+  }
+  if (
+    !hasNumericAnalysisMetrics(value.metrics as Record<string, unknown>) ||
+    !Array.isArray(value.risks) ||
+    !Array.isArray(value.priorities) ||
+    !Array.isArray(value.scheduleSuggestions) ||
+    !isStringArray(value.estimationInsights) ||
+    !isStringArray(value.actionPlan)
+  ) {
+    throw new Error('AI response does not match the TodoFlow analysis schema.');
+  }
+
+  return value as AiTodoFlowAnalysis;
+}
+
+function parseDraftSubtasks(value: unknown): AiTodoFlowDraftTask['subtasks'] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .map((item) => {
+      if (typeof item === 'string') {
+        return { title: item.trim(), completed: false };
+      }
+      if (item && typeof item === 'object') {
+        const subtask = item as Partial<SubTask>;
+        return {
+          title: typeof subtask.title === 'string' ? subtask.title.trim() : '',
+          completed: Boolean(subtask.completed),
+        };
+      }
+      return { title: '', completed: false };
+    })
+    .filter((item) => item.title);
+}
+
+function parseFiniteMinutes(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? Math.max(0, Math.floor(value)) : null;
+}
+
+export function parseAiTodoFlowDraftResult(rawResponse: string): AiTodoFlowDraft {
+  const parsed = parseAiJsonResponse(rawResponse, 'AI draft');
+
+  if (!parsed || typeof parsed !== 'object') {
+    throw new Error('AI draft response JSON must be an object.');
+  }
+
+  const value = parsed as Partial<{
+    title: unknown;
+    suggestedDurationMinutes: unknown;
+    tasks: unknown;
+  }>;
+  if (typeof value.title !== 'string' || !value.title.trim()) {
+    throw new Error('AI draft response is missing title.');
+  }
+  if (!Array.isArray(value.tasks) || value.tasks.length === 0) {
+    throw new Error('AI draft response must include at least one task.');
+  }
+
+  const tasks = value.tasks
+    .map((item) => {
+      if (!item || typeof item !== 'object') {
+        return null;
+      }
+      const task = item as Partial<{ title: unknown; estimatedMinutes: unknown; subtasks: unknown }>;
+      const title = typeof task.title === 'string' ? task.title.trim() : '';
+      if (!title) {
+        return null;
+      }
+      const estimatedMinutes = parseFiniteMinutes(task.estimatedMinutes);
+      if (estimatedMinutes === null) {
+        throw new Error('AI draft response has invalid task estimates.');
+      }
+
+      return {
+        title,
+        estimatedMinutes,
+        subtasks: parseDraftSubtasks(task.subtasks),
+      };
+    })
+    .filter((item): item is AiTodoFlowDraftTask => Boolean(item));
+
+  if (tasks.length === 0) {
+    throw new Error('AI draft response must include at least one titled task.');
+  }
+
+  const taskMinutes = tasks.reduce((total, task) => total + task.estimatedMinutes, 0);
+  const suggestedDurationMinutes =
+    value.suggestedDurationMinutes === undefined
+      ? taskMinutes
+      : parseFiniteMinutes(value.suggestedDurationMinutes);
+  if (suggestedDurationMinutes === null) {
+    throw new Error('AI draft response has invalid suggested duration.');
+  }
+
+  return {
+    title: value.title.trim(),
+    suggestedDurationMinutes,
+    tasks,
+  };
+}
+
+export function createTodoFlowFromAiDraft(
+  draft: AiTodoFlowDraft,
+  todoId: string,
+  createId: () => string
+): TodoFlow {
+  const taskIds: string[] = [];
+  const tasks: Record<string, Task> = {};
+
+  draft.tasks.forEach((draftTask) => {
+    const taskId = createId();
+    taskIds.push(taskId);
+    tasks[taskId] = {
+      id: taskId,
+      title: draftTask.title,
+      estimatedTime: Math.max(0, Math.floor(draftTask.estimatedMinutes * 60)),
+      actualTime: 0,
+      status: TaskStatus.NOT_STARTED,
+      subTasks: draftTask.subtasks.map((subtask, index) => ({
+        id: `${taskId}-subtask-${index + 1}`,
+        title: subtask.title,
+        completed: subtask.completed,
+      })),
+    };
+  });
+
+  const taskTotalSeconds = taskIds.reduce((total, taskId) => total + tasks[taskId].estimatedTime, 0);
+  const estimatedTimeTodo = Math.max(taskTotalSeconds, Math.max(0, Math.floor(draft.suggestedDurationMinutes * 60)));
+
+  return {
+    id: todoId,
+    note: draft.title,
+    status: TodoStatus.STOP,
+    taskCompleted: 0,
+    taskTotal: taskIds.length,
+    estimatedTimeTodo,
+    actualTimeTodo: 0,
+    taskIds,
+    tasks,
+    currentTaskId: undefined,
+    timeLeft: 0,
+    timer: null,
+  };
 }
 
 export function createAiTodoFlowPrompt(
   todos: TodoFlow[],
   tasks: Task[],
   userRequest: string,
-  todayKey = toDateKey(new Date())
+  todayKey = toDateKey(new Date()),
+  outputLanguage: AiOutputLanguage = 'en',
+  analysisContext = ''
 ): string {
+  const languageName = getAiOutputLanguageName(outputLanguage);
+  const trimmedAnalysisContext = analysisContext.trim();
   return [
     'You are an AI TodoFlow planner.',
-    'Return a concise TodoFlow plan that the user can copy into the app.',
+    'Return ONLY valid JSON. Do not wrap it in markdown.',
+    'Use this exact schema:',
+    '{',
+    '  "title": "string",',
+    '  "suggestedDurationMinutes": 90,',
+    '  "tasks": [{ "title": "string", "estimatedMinutes": 30, "subtasks": [{ "title": "string", "completed": false }] }]',
+    '}',
     'Include a TodoFlow title, suggested schedule duration, and task list with estimated minutes.',
     'Use the existing data as context to avoid conflicts and unrealistic planning.',
+    `Write all user-facing string values in ${languageName}. Keep JSON keys exactly as specified.`,
     '',
     `User request: ${userRequest.trim() || 'Create a TodoFlow for my next useful work block.'}`,
+    ...(trimmedAnalysisContext
+      ? [
+          '',
+          'Use this previous AI analysis as planning context:',
+          trimmedAnalysisContext,
+        ]
+      : []),
     '',
     'Current TodoFlow data:',
     buildTodoFlowContext(todos, tasks, todayKey),
@@ -199,8 +851,7 @@ export function buildMonthDays(monthDate: Date, today = new Date()): CalendarDay
   const year = monthDate.getFullYear();
   const month = monthDate.getMonth();
   const firstOfMonth = new Date(year, month, 1);
-  const start = new Date(firstOfMonth);
-  start.setDate(firstOfMonth.getDate() - firstOfMonth.getDay());
+  const start = getMonthCalendarGridStart(monthDate);
 
   const lastOfMonth = new Date(year, month + 1, 0);
   const end = new Date(lastOfMonth);
@@ -218,6 +869,36 @@ export function buildMonthDays(monthDate: Date, today = new Date()): CalendarDay
       dateKey,
       dayOfMonth: date.getDate(),
       isCurrentMonth: date.getMonth() === month,
+      isToday: dateKey === todayKey,
+    });
+    cursor.setDate(cursor.getDate() + 1);
+  }
+
+  return days;
+}
+
+export function getMonthCalendarGridStart(monthDate: Date): Date {
+  const firstOfMonth = new Date(monthDate.getFullYear(), monthDate.getMonth(), 1);
+  const start = new Date(firstOfMonth);
+  start.setDate(firstOfMonth.getDate() - firstOfMonth.getDay());
+  return start;
+}
+
+export function buildCalendarWindowDays(startDate: Date, today = new Date()): CalendarDay[] {
+  const start = new Date(startDate);
+  start.setDate(start.getDate() - start.getDay());
+  const todayKey = toDateKey(today);
+  const days: CalendarDay[] = [];
+  const cursor = new Date(start);
+
+  for (let index = 0; index < 42; index += 1) {
+    const date = new Date(cursor);
+    const dateKey = toDateKey(date);
+    days.push({
+      date,
+      dateKey,
+      dayOfMonth: date.getDate(),
+      isCurrentMonth: true,
       isToday: dateKey === todayKey,
     });
     cursor.setDate(cursor.getDate() + 1);
@@ -246,10 +927,355 @@ function getScheduleSlotsDurationSeconds(slots?: ScheduleSlot[]): number | undef
   return slots.reduce((total, slot) => total + secondsBetweenTimeStrings(slot.startTime, slot.endTime), 0);
 }
 
+function getScheduleSlotsMaxDurationSeconds(slots?: ScheduleSlot[]): number | undefined {
+  if (!slots || slots.length === 0) {
+    return undefined;
+  }
+
+  return Math.max(...slots.map((slot) => secondsBetweenTimeStrings(slot.startTime, slot.endTime)));
+}
+
+function getTodoNonBreakTaskIds(todo: TodoFlow): string[] {
+  return todo.taskIds.filter((taskId) => {
+    const task = todo.tasks[taskId];
+    return task && !task.isTaskBreak;
+  });
+}
+
+function buildTodoDayTaskAllocations(todo: TodoFlow): Record<string, TodoFlowDayTaskState> {
+  return todo.taskIds.reduce<Record<string, TodoFlowDayTaskState>>((allocations, taskId) => {
+    const task = todo.tasks[taskId];
+    if (task) {
+      allocations[taskId] = {
+        estimatedTime: Math.max(0, Math.floor(task.estimatedTime || 0)),
+        actualTime: Math.max(0, Math.floor(task.actualTime || 0)),
+        status: task.status || TaskStatus.NOT_STARTED,
+      };
+    }
+    return allocations;
+  }, {});
+}
+
+function createTodoDayPlan(todo: TodoFlow, dateKey: string): TodoFlowDayPlan {
+  const scheduleSlot = getScheduleSlotForDate(todo.scheduleSlots, dateKey);
+  const taskAllocations = buildTodoDayTaskAllocations(todo);
+  const taskTotal = Math.max(0, Math.floor(todo.taskTotal || getTodoNonBreakTaskIds(todo).length));
+
+  return {
+    dateKey,
+    scheduleSlot: scheduleSlot ? { ...scheduleSlot } : undefined,
+    status: todo.status,
+    estimatedTimeTodo: getTodoEstimatedSeconds(todo),
+    actualTimeTodo: Math.max(0, Math.floor(todo.actualTimeTodo || 0)),
+    taskCompleted: Math.max(0, Math.floor(todo.taskCompleted || 0)),
+    taskTotal,
+    taskAllocations,
+    currentTaskId: todo.currentTaskId,
+    timeLeft: todo.timeLeft,
+    lastNotifiedDate: todo.lastNotifiedDate,
+  };
+}
+
+function normalizeTodoDayPlan(todo: TodoFlow, dateKey: string, plan?: TodoFlowDayPlan): TodoFlowDayPlan {
+  const fallback = createTodoDayPlan(todo, dateKey);
+  const taskAllocations = { ...fallback.taskAllocations, ...(plan?.taskAllocations || {}) };
+  const scheduleSlot = plan?.scheduleSlot || fallback.scheduleSlot;
+  const taskAllocationTotal = Object.entries(taskAllocations).reduce((total, [taskId, allocation]) => {
+    const task = todo.tasks[taskId];
+    if (task?.isTaskBreak) {
+      return total;
+    }
+    return total + Math.max(0, Math.floor(allocation.estimatedTime || 0));
+  }, 0);
+
+  return {
+    ...fallback,
+    ...plan,
+    dateKey,
+    scheduleSlot: scheduleSlot ? { ...scheduleSlot } : undefined,
+    estimatedTimeTodo: Math.max(0, Math.floor(plan?.estimatedTimeTodo ?? fallback.estimatedTimeTodo), taskAllocationTotal),
+    actualTimeTodo: Math.max(0, Math.floor(plan?.actualTimeTodo ?? fallback.actualTimeTodo)),
+    taskCompleted: Math.max(0, Math.floor(plan?.taskCompleted ?? fallback.taskCompleted)),
+    taskTotal: Math.max(0, Math.floor(plan?.taskTotal ?? fallback.taskTotal)),
+    taskAllocations,
+  };
+}
+
+export function ensureTodoDayPlans(todo: TodoFlow): TodoFlow {
+  const dateKeys = getTodoScheduleDateKeys(todo);
+  if (dateKeys.length === 0) {
+    return todo;
+  }
+
+  const dayPlans = { ...(todo.dayPlans || {}) };
+  for (const dateKey of dateKeys) {
+    dayPlans[dateKey] = normalizeTodoDayPlan(todo, dateKey, dayPlans[dateKey]);
+  }
+
+  return {
+    ...todo,
+    dayPlans,
+  };
+}
+
+export function getTodoDayPlan(todo: TodoFlow, dateKey?: string): TodoFlowDayPlan | undefined {
+  if (!dateKey) {
+    return undefined;
+  }
+
+  return ensureTodoDayPlans(todo).dayPlans?.[dateKey];
+}
+
+export function getTodoForDate(todo: TodoFlow, dateKey?: string): TodoFlow {
+  const plan = getTodoDayPlan(todo, dateKey);
+  if (!plan) {
+    return todo;
+  }
+
+  const tasks = Object.fromEntries(
+    Object.entries(todo.tasks).map(([taskId, task]) => {
+      const allocation = plan.taskAllocations[taskId];
+      if (!allocation) {
+        return [taskId, task];
+      }
+
+      return [
+        taskId,
+        {
+          ...task,
+          estimatedTime: allocation.estimatedTime,
+          actualTime: allocation.actualTime,
+          status: allocation.status,
+        },
+      ];
+    })
+  ) as Record<string, Task>;
+
+  return {
+    ...ensureTodoDayPlans(todo),
+    status: plan.status,
+    estimatedTimeTodo: plan.estimatedTimeTodo,
+    actualTimeTodo: plan.actualTimeTodo,
+    taskCompleted: plan.taskCompleted,
+    taskTotal: plan.taskTotal,
+    currentTaskId: plan.currentTaskId,
+    timeLeft: plan.timeLeft,
+    lastNotifiedDate: plan.lastNotifiedDate,
+    activeDateKey: dateKey,
+    tasks,
+  };
+}
+
+export function applyTodoDateState(todo: TodoFlow, dateKey: string | undefined, scopedTodo: TodoFlow): TodoFlow {
+  if (!dateKey) {
+    return scopedTodo;
+  }
+
+  const baseTodo = ensureTodoDayPlans(todo);
+  const existingPlan = baseTodo.dayPlans?.[dateKey];
+  const taskAllocations = scopedTodo.taskIds.reduce<Record<string, TodoFlowDayTaskState>>((allocations, taskId) => {
+    const task = scopedTodo.tasks[taskId];
+    if (task) {
+      allocations[taskId] = {
+        estimatedTime: Math.max(0, Math.floor(task.estimatedTime || 0)),
+        actualTime: Math.max(0, Math.floor(task.actualTime || 0)),
+        status: task.status || TaskStatus.NOT_STARTED,
+      };
+    }
+    return allocations;
+  }, {});
+  const scopedSlot = getScheduleSlotForDate(scopedTodo.scheduleSlots, dateKey) || existingPlan?.scheduleSlot;
+  const dayPlans = {
+    ...(baseTodo.dayPlans || {}),
+    [dateKey]: normalizeTodoDayPlan(baseTodo, dateKey, {
+      dateKey,
+      scheduleSlot: scopedSlot ? { ...scopedSlot } : undefined,
+      status: scopedTodo.status,
+      estimatedTimeTodo: Math.max(0, Math.floor(scopedTodo.estimatedTimeTodo || 0)),
+      actualTimeTodo: Math.max(0, Math.floor(scopedTodo.actualTimeTodo || 0)),
+      taskCompleted: Math.max(0, Math.floor(scopedTodo.taskCompleted || 0)),
+      taskTotal: Math.max(0, Math.floor(scopedTodo.taskTotal || getTodoNonBreakTaskIds(scopedTodo).length)),
+      taskAllocations,
+      currentTaskId: scopedTodo.currentTaskId,
+      timeLeft: scopedTodo.timeLeft,
+      lastNotifiedDate: scopedTodo.lastNotifiedDate,
+    }),
+  };
+  const scheduleSlots = scopedSlot
+    ? applyScheduleSlot(baseTodo.scheduleSlots, scopedSlot)
+    : baseTodo.scheduleSlots;
+  const sharedTasks = Object.fromEntries(
+    Object.entries(scopedTodo.tasks).map(([taskId, task]) => {
+      const baseTask = baseTodo.tasks[taskId] || task;
+      return [
+        taskId,
+        {
+          ...baseTask,
+          title: task.title,
+          description: task.description,
+          isTaskBreak: task.isTaskBreak,
+          subTasks: task.subTasks,
+        },
+      ];
+    })
+  ) as Record<string, Task>;
+
+  return {
+    ...baseTodo,
+    note: scopedTodo.note,
+    taskIds: scopedTodo.taskIds,
+    tasks: sharedTasks,
+    scheduleSlots,
+    scheduledDate: getTodoScheduleDateKeys({ ...baseTodo, scheduleSlots })[0],
+    scheduledDates: getTodoScheduleDateKeys({ ...baseTodo, scheduleSlots }).length > 1
+      ? getTodoScheduleDateKeys({ ...baseTodo, scheduleSlots })
+      : undefined,
+    dayPlans,
+    activeDateKey: dateKey,
+    lastNotifiedDate: undefined,
+  };
+}
+
+export function getPersistableTodoDateState(todo: TodoFlow, dateKey: string | undefined = todo.activeDateKey): TodoFlow {
+  const persistableTodo = {
+    ...todo,
+    timer: null,
+  };
+
+  return dateKey ? applyTodoDateState(persistableTodo, dateKey, persistableTodo) : persistableTodo;
+}
+
+export function getTodoScheduleTargetDurationSeconds(todo: TodoFlow, slots: ScheduleSlot[] = todo.scheduleSlots || []): number {
+  const slotDuration = getScheduleSlotsDurationSeconds(slots);
+  return Math.max(0, Math.floor(slotDuration ?? getTodoEstimatedSeconds(todo)));
+}
+
+export function getTodoScheduleSlotTargetDurationSeconds(todo: TodoFlow, slots: ScheduleSlot[] = todo.scheduleSlots || []): number {
+  const slotDuration = getScheduleSlotsMaxDurationSeconds(slots);
+  return Math.max(0, Math.floor(slotDuration ?? getTodoEstimatedSeconds(todo)));
+}
+
+export function getTodoScheduleSelectionDurationSeconds({
+  isCreateMode,
+  existingSlotDurationSeconds,
+  selectedDurationSeconds,
+  targetScheduleDurationSeconds,
+  unslottedSelectionCount: _unslottedSelectionCount,
+}: {
+  isCreateMode: boolean;
+  existingSlotDurationSeconds?: number;
+  selectedDurationSeconds: number;
+  targetScheduleDurationSeconds: number;
+  unslottedSelectionCount?: number;
+}): number {
+  if (existingSlotDurationSeconds !== undefined) {
+    return existingSlotDurationSeconds;
+  }
+  if (!isCreateMode && targetScheduleDurationSeconds > 0) {
+    return targetScheduleDurationSeconds;
+  }
+  return selectedDurationSeconds;
+}
+
+export function getTodoScheduleSelectionRangeMinutes({
+  isCreateMode,
+  existingSlotDurationSeconds,
+  startMinutes,
+  selectedEndMinutes,
+  selectedDurationSeconds,
+  targetScheduleDurationSeconds,
+  unslottedSelectionCount,
+}: {
+  isCreateMode: boolean;
+  existingSlotDurationSeconds?: number;
+  startMinutes: number;
+  selectedEndMinutes: number;
+  selectedDurationSeconds: number;
+  targetScheduleDurationSeconds: number;
+  unslottedSelectionCount?: number;
+}): { start: number; end: number } {
+  const durationSeconds = getTodoScheduleSelectionDurationSeconds({
+    isCreateMode,
+    existingSlotDurationSeconds,
+    selectedDurationSeconds,
+    targetScheduleDurationSeconds,
+    unslottedSelectionCount,
+  });
+  const durationMinutes = durationSeconds / 60;
+  const start = Math.max(0, Math.min(startMinutes, 24 * 60 - durationMinutes));
+  const end = isCreateMode ? selectedEndMinutes : start + durationMinutes;
+
+  return {
+    start,
+    end: Math.min(24 * 60, end),
+  };
+}
+
+export function getTodoScheduleSaveEstimateDurationSeconds({
+  todo,
+  isCreateMode,
+  totalSelectedDurationSeconds,
+}: {
+  todo: TodoFlow;
+  isCreateMode: boolean;
+  totalSelectedDurationSeconds: number;
+}): number {
+  const selectedDuration = Math.max(0, Math.floor(totalSelectedDurationSeconds));
+  const taskTotal = getTodoTaskEstimatedSeconds(todo);
+  if (isCreateMode) {
+    return Math.max(selectedDuration, taskTotal);
+  }
+
+  return Math.max(
+    Math.max(0, Math.floor(todo.estimatedTimeTodo || 0)),
+    getTodoScheduleSlotTargetDurationSeconds(todo, todo.scheduleSlots || []),
+    taskTotal
+  );
+}
+
+export function getTodoScheduleMinimumTotalDurationSeconds({
+  todo,
+  isCreateMode,
+  initialScheduleSlots,
+}: {
+  todo: TodoFlow;
+  isCreateMode: boolean;
+  initialScheduleSlots: ScheduleSlot[];
+}): number {
+  if (isCreateMode) {
+    return 0;
+  }
+
+  return Math.max(
+    getTodoScheduleTargetDurationSeconds(todo, initialScheduleSlots),
+    Math.max(0, Math.floor(todo.estimatedTimeTodo || 0)),
+    getTodoTaskEstimatedSeconds(todo)
+  );
+}
+
+export function getTodoScheduleMinimumSlotDurationSeconds({
+  todo,
+  isCreateMode,
+  dateKey,
+  minimumStepSeconds,
+}: {
+  todo: TodoFlow;
+  isCreateMode: boolean;
+  dateKey: string;
+  minimumStepSeconds: number;
+}): number {
+  const minimumStep = Math.max(0, Math.floor(minimumStepSeconds));
+  if (isCreateMode) {
+    return minimumStep;
+  }
+
+  return Math.max(minimumStep, Math.max(0, Math.floor(todo.estimatedTimeTodo || 0)), getTodoTaskEstimatedSeconds(todo));
+}
+
 export function getTodoScheduleDateKeys(todo: TodoFlow): string[] {
   const slotDateKeys = getScheduleSlotDateKeys(todo.scheduleSlots);
   if (slotDateKeys.length > 0) {
-    return slotDateKeys;
+    return uniqueSortedDateKeys([...(todo.scheduledDates || []), ...slotDateKeys]);
   }
   if (todo.scheduledDates && todo.scheduledDates.length > 0) {
     return uniqueSortedDateKeys(todo.scheduledDates);
@@ -268,18 +1294,26 @@ export function getTaskScheduleDateKeys(task: Task): string[] {
 function applyTodoScheduleDateKeys(todo: TodoFlow, dateKeys: string[]): TodoFlow {
   const uniqueDateKeys = uniqueSortedDateKeys(dateKeys);
   const scheduleSlots = (todo.scheduleSlots || []).filter((slot) => uniqueDateKeys.includes(slot.dateKey));
+  const dayPlans = Object.fromEntries(
+    Object.entries(todo.dayPlans || {}).filter(([dateKey]) => uniqueDateKeys.includes(dateKey))
+  ) as Record<string, TodoFlowDayPlan>;
 
   return {
     ...todo,
     scheduledDate: uniqueDateKeys[0],
     scheduledDates: uniqueDateKeys.length > 1 ? uniqueDateKeys : undefined,
     scheduleSlots: scheduleSlots.length > 0 ? scheduleSlots : undefined,
+    dayPlans: Object.keys(dayPlans).length > 0 ? dayPlans : undefined,
     lastNotifiedDate: undefined,
   };
 }
 
 export function setTodoAssignedDate(todo: TodoFlow, dateKey: string): TodoFlow {
   return applyTodoScheduleDateKeys(todo, [...getTodoScheduleDateKeys(todo), dateKey]);
+}
+
+export function setTodoAssignedDates(todo: TodoFlow, dateKeys: string[]): TodoFlow {
+  return applyTodoScheduleDateKeys(todo, dateKeys);
 }
 
 export function unsetTodoAssignedDate(todo: TodoFlow, dateKey: string): TodoFlow {
@@ -315,6 +1349,24 @@ function cloneTodoTasksWithIds(
   };
 }
 
+function resizeTodoTasksToTotal(todo: TodoFlow, totalSeconds: number): TodoFlow {
+  const taskIds = getTodoNonBreakTaskIds(todo);
+  const distributedEstimates = distributeSecondsByCurrentWeights(totalSeconds, taskIds, todo.tasks);
+  const tasks = { ...todo.tasks };
+  for (const taskId of taskIds) {
+    tasks[taskId] = {
+      ...tasks[taskId],
+      estimatedTime: distributedEstimates[taskId] || 0,
+    };
+  }
+
+  return {
+    ...todo,
+    tasks,
+    taskTotal: taskIds.length,
+  };
+}
+
 export function splitTodoFlowForDate(
   todo: TodoFlow,
   newTodoId: string,
@@ -332,30 +1384,49 @@ export function splitTodoFlowForDate(
   const originalDuration = getScheduleSlotsDurationSeconds(remainingSlots);
   const detachedDuration = getScheduleSlotsDurationSeconds(detachedSlots);
   const detachedTasks = cloneTodoTasksWithIds(todo, createTaskId);
+  const originalTargetDuration = Math.max(0, Math.floor(originalDuration ?? todo.estimatedTimeTodo));
+  const detachedTargetDuration = Math.max(0, Math.floor(detachedDuration ?? todo.estimatedTimeTodo));
 
-  const originalTodo = {
+  const originalTodo = resizeTodoTasksToTotal({
     ...applyTodoScheduleDateKeys(todo, remainingDateKeys),
     scheduleSlots: remainingSlots.length > 0 ? remainingSlots.map((slot) => ({ ...slot })) : undefined,
-    estimatedTimeTodo: originalDuration ?? todo.estimatedTimeTodo,
+    estimatedTimeTodo: originalTargetDuration,
     timer: null,
     lastNotifiedDate: undefined,
-  };
+  }, originalTargetDuration);
 
-  const detachedTodo = {
+  const detachedTodo = resizeTodoTasksToTotal({
     ...todo,
     id: newTodoId,
     scheduledDate: dateKey,
     scheduledDates: undefined,
     scheduleSlots: detachedSlots.length > 0 ? detachedSlots.map((slot) => ({ ...slot })) : undefined,
-    estimatedTimeTodo: detachedDuration ?? todo.estimatedTimeTodo,
+    estimatedTimeTodo: detachedTargetDuration,
     tasks: detachedTasks.tasks,
     taskIds: detachedTasks.taskIds,
     currentTaskId: detachedTasks.currentTaskId,
+    dayPlans: undefined,
     timer: null,
     lastNotifiedDate: undefined,
-  };
+  }, detachedTargetDuration);
 
   return { originalTodo, detachedTodo };
+}
+
+export function filterTodoFlowsAssignableToDateSelection(
+  todos: TodoFlow[],
+  selectedDateKeys: string[],
+  searchText: string
+): TodoFlow[] {
+  const selectedDateCount = uniqueSortedDateKeys(selectedDateKeys).length;
+  const query = searchText.trim().toLowerCase();
+  if (selectedDateCount === 0) {
+    return [];
+  }
+
+  return dedupeById(todos).filter((todo) => {
+    return getTodoScheduleDateKeys(todo).length === selectedDateCount && todoMatchesSearch(todo, query);
+  });
 }
 
 function todoMatchesSearch(todo: TodoFlow, query: string): boolean {
@@ -383,6 +1454,17 @@ function isTodoCompleted(todo: TodoFlow): boolean {
   return todo.taskTotal > 0 && todo.taskCompleted >= todo.taskTotal;
 }
 
+function dedupeById<T extends { id: string }>(items: T[]): T[] {
+  const seenIds = new Set<string>();
+  return items.filter((item) => {
+    if (!item.id || seenIds.has(item.id)) {
+      return false;
+    }
+    seenIds.add(item.id);
+    return true;
+  });
+}
+
 export function filterManageItems(
   todos: TodoFlow[],
   tasks: Task[],
@@ -390,8 +1472,8 @@ export function filterManageItems(
   filter: ManageItemFilter
 ): ScheduledDayItems {
   const query = searchText.trim().toLowerCase();
-  const searchedTodos = todos.filter((todo) => todoMatchesSearch(todo, query));
-  const searchedTasks = tasks.filter((task) => taskMatchesSearch(task, query));
+  const searchedTodos = dedupeById(todos).filter((todo) => todoMatchesSearch(todo, query));
+  const searchedTasks = dedupeById(tasks).filter((task) => taskMatchesSearch(task, query));
 
   if (filter === 'todos') {
     return { todos: searchedTodos, tasks: [] };
@@ -435,13 +1517,30 @@ export function getTodoFlowAnalytics(
   const todoStats = todos.reduce(
     (stats, todo) => {
       const dateKeys = getTodoScheduleDateKeys(todo);
+      const hasDayPlans = Boolean(todo.dayPlans && dateKeys.some((dateKey) => todo.dayPlans?.[dateKey]));
+      const dayPlans = hasDayPlans ? ensureTodoDayPlans(todo).dayPlans || {} : {};
       stats.scheduledDays += dateKeys.length;
       stats.todayTodoFlows += dateKeys.includes(todayKey) ? 1 : 0;
-      stats.completedTasks += todo.taskCompleted || 0;
-      stats.totalTasks += todo.taskTotal || todo.taskIds.filter((taskId) => !todo.tasks[taskId]?.isTaskBreak).length;
-      stats.inProgressTodoFlows += hasTodoFlowStarted(todo) && !isTodoCompleted(todo) ? 1 : 0;
-      stats.plannedSeconds += todo.estimatedTimeTodo || 0;
-      stats.actualSeconds += todo.actualTimeTodo || 0;
+      if (hasDayPlans) {
+        let hasActiveDay = false;
+        for (const dateKey of dateKeys) {
+          const plan = dayPlans[dateKey];
+          if (!plan) continue;
+          const scopedTodo = getTodoForDate(todo, dateKey);
+          stats.completedTasks += plan.taskCompleted || 0;
+          stats.totalTasks += plan.taskTotal || todo.taskIds.filter((taskId) => !todo.tasks[taskId]?.isTaskBreak).length;
+          stats.plannedSeconds += plan.estimatedTimeTodo || 0;
+          stats.actualSeconds += plan.actualTimeTodo || 0;
+          hasActiveDay ||= hasTodoFlowStarted(scopedTodo) && !isTodoCompleted(scopedTodo);
+        }
+        stats.inProgressTodoFlows += hasActiveDay ? 1 : 0;
+      } else {
+        stats.completedTasks += todo.taskCompleted || 0;
+        stats.totalTasks += todo.taskTotal || todo.taskIds.filter((taskId) => !todo.tasks[taskId]?.isTaskBreak).length;
+        stats.inProgressTodoFlows += hasTodoFlowStarted(todo) && !isTodoCompleted(todo) ? 1 : 0;
+        stats.plannedSeconds += getTodoEstimatedSeconds(todo);
+        stats.actualSeconds += todo.actualTimeTodo || 0;
+      }
       return stats;
     },
     {
@@ -554,6 +1653,46 @@ function secondsFromMidnightToTimeString(totalSeconds: number): string {
   return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
 }
 
+function distributeSecondsByCurrentWeights(totalSeconds: number, taskIds: string[], tasks: Record<string, Task>): Record<string, number> {
+  const safeTotal = Math.max(0, Math.floor(totalSeconds));
+  if (taskIds.length === 0) {
+    return {};
+  }
+
+  const currentTotal = taskIds.reduce((total, taskId) => total + Math.max(0, tasks[taskId]?.estimatedTime || 0), 0);
+  if (currentTotal <= 0) {
+    const baseDuration = Math.floor(safeTotal / taskIds.length);
+    let remainder = safeTotal - baseDuration * taskIds.length;
+    return Object.fromEntries(
+      taskIds.map((taskId) => {
+        const estimatedTime = baseDuration + (remainder > 0 ? 1 : 0);
+        remainder = Math.max(0, remainder - 1);
+        return [taskId, estimatedTime];
+      })
+    );
+  }
+
+  const weighted = taskIds.map((taskId, index) => {
+    const exact = (Math.max(0, tasks[taskId]?.estimatedTime || 0) / currentTotal) * safeTotal;
+    return {
+      taskId,
+      index,
+      estimatedTime: Math.floor(exact),
+      fraction: exact - Math.floor(exact),
+    };
+  });
+  let remainder = safeTotal - weighted.reduce((total, item) => total + item.estimatedTime, 0);
+  weighted
+    .sort((a, b) => b.fraction - a.fraction || a.index - b.index)
+    .forEach((item) => {
+      if (remainder <= 0) return;
+      item.estimatedTime += 1;
+      remainder -= 1;
+    });
+
+  return Object.fromEntries(weighted.map((item) => [item.taskId, item.estimatedTime]));
+}
+
 export function moveScheduleSlotPreservingDuration(
   slot: ScheduleSlot,
   dateKey: string,
@@ -635,6 +1774,249 @@ export function getTodoTaskEstimatedSeconds(todo: TodoFlow): number {
   }, 0);
 }
 
+export function getTodoFlowCurrentTask(todo: TodoFlow): Task | undefined {
+  return todo.currentTaskId ? todo.tasks[todo.currentTaskId] : undefined;
+}
+
+export function getRenderableTodoFlowTaskIds(todo: TodoFlow): string[] {
+  const seenTaskIds = new Set<string>();
+  return todo.taskIds.filter((taskId) => {
+    const task = todo.tasks[taskId];
+    if (!task || seenTaskIds.has(taskId)) {
+      return false;
+    }
+    seenTaskIds.add(taskId);
+    return taskId !== todo.currentTaskId && task.status !== TaskStatus.COMPLETED;
+  });
+}
+
+export function redistributeTaskEstimateWithinTodo(
+  todo: TodoFlow,
+  taskId: string,
+  nextEstimatedSeconds: number
+): TodoFlow {
+  const task = todo.tasks[taskId];
+  if (!task || task.isTaskBreak) {
+    return todo;
+  }
+
+  const nonBreakTaskIds = todo.taskIds.filter((id) => {
+    const item = todo.tasks[id];
+    return item && !item.isTaskBreak;
+  });
+  const otherTaskIds = nonBreakTaskIds.filter((id) => id !== taskId);
+  const currentTaskTotal = getTodoTaskEstimatedSeconds(todo);
+  const todoTotal = Math.max(Math.max(0, Math.floor(todo.estimatedTimeTodo || 0)), currentTaskTotal);
+  const hasFixedTotal = todoTotal > 0;
+  const safeNext = Math.max(0, Math.floor(nextEstimatedSeconds));
+  const nextTotal = hasFixedTotal ? todoTotal : safeNext + currentTaskTotal - Math.max(0, task.estimatedTime || 0);
+  const targetEstimate = Math.min(safeNext, nextTotal);
+  const remainingEstimate = Math.max(0, nextTotal - targetEstimate);
+  const distributedOtherEstimates = distributeSecondsByCurrentWeights(remainingEstimate, otherTaskIds, todo.tasks);
+  const tasks = {
+    ...todo.tasks,
+    [taskId]: {
+      ...task,
+      estimatedTime: targetEstimate,
+    },
+  };
+
+  for (const id of otherTaskIds) {
+    tasks[id] = {
+      ...tasks[id],
+      estimatedTime: distributedOtherEstimates[id] || 0,
+    };
+  }
+
+  return {
+    ...todo,
+    tasks,
+    taskTotal: nonBreakTaskIds.length,
+    estimatedTimeTodo: nextTotal,
+  };
+}
+
+export function addTaskWithProportionalEstimate(todo: TodoFlow, task: Task): TodoFlow {
+  if (task.isTaskBreak) {
+    return {
+      ...todo,
+      tasks: { ...todo.tasks, [task.id]: task },
+      taskIds: [...todo.taskIds, task.id],
+      taskTotal: todo.taskIds.filter((id) => {
+        const item = todo.tasks[id];
+        return item && !item.isTaskBreak;
+      }).length,
+    };
+  }
+
+  const nonBreakTaskIds = todo.taskIds.filter((id) => {
+    const item = todo.tasks[id];
+    return item && !item.isTaskBreak;
+  });
+  const todoTotal = getTodoEstimatedSeconds(todo);
+  const currentEstimates = nonBreakTaskIds.map((id) => Math.max(0, Math.floor(todo.tasks[id]?.estimatedTime || 0)));
+  const newTaskEstimate = todoTotal > 0 && currentEstimates.length > 0 ? Math.min(...currentEstimates) : Math.max(0, Math.floor(task.estimatedTime || 0));
+  const remainingEstimate = Math.max(0, todoTotal - newTaskEstimate);
+  const distributedExistingEstimates = distributeSecondsByCurrentWeights(remainingEstimate, nonBreakTaskIds, todo.tasks);
+  const tasks: Record<string, Task> = {
+    ...todo.tasks,
+    [task.id]: {
+      ...task,
+      estimatedTime: newTaskEstimate,
+    },
+  };
+
+  for (const id of nonBreakTaskIds) {
+    tasks[id] = {
+      ...tasks[id],
+      estimatedTime: distributedExistingEstimates[id] || 0,
+    };
+  }
+
+  const taskIds = [...todo.taskIds, task.id];
+
+  return {
+    ...todo,
+    tasks,
+    taskIds,
+    taskTotal: nonBreakTaskIds.length + 1,
+    estimatedTimeTodo: todoTotal,
+  };
+}
+
+export function resizeTaskAllocationBoundary(
+  todo: TodoFlow,
+  previousTaskId: string,
+  nextTaskId: string,
+  deltaSeconds: number
+): TodoFlow {
+  const previousTask = todo.tasks[previousTaskId];
+  const nextTask = todo.tasks[nextTaskId];
+  if (!previousTask || !nextTask || previousTask.isTaskBreak || nextTask.isTaskBreak) {
+    return todo;
+  }
+
+  const previousEstimate = Math.max(0, Math.floor(previousTask.estimatedTime || 0));
+  const nextEstimate = Math.max(0, Math.floor(nextTask.estimatedTime || 0));
+  const pairTotal = previousEstimate + nextEstimate;
+  const nextPreviousEstimate = Math.max(0, Math.min(pairTotal, previousEstimate + Math.floor(deltaSeconds)));
+  const nextNextEstimate = pairTotal - nextPreviousEstimate;
+
+  return {
+    ...todo,
+    tasks: {
+      ...todo.tasks,
+      [previousTaskId]: {
+        ...previousTask,
+        estimatedTime: nextPreviousEstimate,
+      },
+      [nextTaskId]: {
+        ...nextTask,
+        estimatedTime: nextNextEstimate,
+      },
+    },
+  };
+}
+
+export function resizeTaskAllocationBoundaryFromDrag(
+  todo: TodoFlow,
+  previousTaskId: string,
+  nextTaskId: string,
+  drag: { startY: number; currentY: number; totalSeconds: number; laneHeight: number }
+): TodoFlow {
+  const safeLaneHeight = Math.max(1, drag.laneHeight);
+  const safeTotalSeconds = Math.max(1, drag.totalSeconds);
+  const deltaSeconds = Math.round(((drag.currentY - drag.startY) / safeLaneHeight) * safeTotalSeconds);
+  return resizeTaskAllocationBoundary(todo, previousTaskId, nextTaskId, deltaSeconds);
+}
+
+export function reorderTodoTaskIds(todo: TodoFlow, fromIndex: number, toIndex: number): TodoFlow {
+  const taskIds = [...todo.taskIds];
+  if (fromIndex < 0 || fromIndex >= taskIds.length || toIndex < 0 || toIndex >= taskIds.length) {
+    return todo;
+  }
+  if (fromIndex === toIndex) {
+    return todo;
+  }
+
+  const [movedTaskId] = taskIds.splice(fromIndex, 1);
+  taskIds.splice(toIndex, 0, movedTaskId);
+
+  return {
+    ...todo,
+    taskIds,
+  };
+}
+
+export type ResizeTodoFlowScheduleDurationResult =
+  | { ok: true; todo: TodoFlow }
+  | { ok: false; reason: string };
+
+export function resizeTodoFlowScheduleDuration(
+  todo: TodoFlow,
+  nextTotalSeconds: number,
+  otherTodos: TodoFlow[] = []
+): ResizeTodoFlowScheduleDurationResult {
+  const safeNextTotal = Math.max(0, Math.floor(nextTotalSeconds));
+  const taskTotal = getTodoTaskEstimatedSeconds(todo);
+  if (safeNextTotal < taskTotal) {
+    return { ok: false, reason: 'TodoFlow total time cannot be shorter than the current tasks total' };
+  }
+
+  const slots = todo.scheduleSlots || [];
+  if (slots.length === 0) {
+    return {
+      ok: true,
+      todo: {
+        ...todo,
+        estimatedTimeTodo: safeNextTotal,
+      },
+    };
+  }
+
+  const currentTotal = getScheduleSlotsDurationSeconds(slots) || 0;
+  if (safeNextTotal < currentTotal) {
+    return { ok: false, reason: 'TodoFlow total time can only be extended' };
+  }
+
+  const deltaSeconds = safeNextTotal - currentTotal;
+  const sortedSlots = [...slots].sort((a, b) => `${a.dateKey}T${a.startTime}`.localeCompare(`${b.dateKey}T${b.startTime}`));
+  const lastSlot = sortedSlots[sortedSlots.length - 1];
+  const lastSlotStart = parseTimeString(lastSlot.startTime);
+  const lastSlotDuration = secondsBetweenTimeStrings(lastSlot.startTime, lastSlot.endTime);
+  const nextLastSlot: ScheduleSlot = {
+    ...lastSlot,
+    endTime: secondsFromMidnightToTimeString(lastSlotStart + lastSlotDuration + deltaSeconds),
+  };
+
+  if (parseTimeString(nextLastSlot.endTime) - lastSlotStart !== lastSlotDuration + deltaSeconds) {
+    return { ok: false, reason: 'TodoFlow total time cannot pass midnight' };
+  }
+
+  const otherSlots = otherTodos
+    .filter((item) => item.id !== todo.id)
+    .flatMap((item) => item.scheduleSlots || []);
+  if (hasOverlappingScheduleSlot(nextLastSlot, otherSlots)) {
+    return { ok: false, reason: 'This total time overlaps with another TodoFlow' };
+  }
+
+  const scheduleSlots = slots.map((slot) =>
+    slot.dateKey === lastSlot.dateKey && slot.startTime === lastSlot.startTime && slot.endTime === lastSlot.endTime
+      ? nextLastSlot
+      : slot
+  );
+
+  return {
+    ok: true,
+    todo: {
+      ...todo,
+      scheduleSlots,
+      estimatedTimeTodo: safeNextTotal,
+      lastNotifiedDate: undefined,
+    },
+  };
+}
+
 export function hasTodoFlowStarted(todo: TodoFlow): boolean {
   const hasTaskProgress = todo.taskIds.some((taskId) => {
     const task = todo.tasks[taskId];
@@ -654,6 +2036,11 @@ export function hasTodoFlowStarted(todo: TodoFlow): boolean {
     todo.status !== TodoStatus.STOP;
 
   return hasTodoProgress || hasTaskProgress;
+}
+
+export function canResumeTodoFlowEntry(todo: TodoFlow): boolean {
+  const currentTask = todo.currentTaskId ? todo.tasks[todo.currentTaskId] : undefined;
+  return Boolean(currentTask && currentTask.status !== TaskStatus.COMPLETED);
 }
 
 export function getTodoFlowLaunchLabel(todo: TodoFlow): 'Start' | 'Resume' {
@@ -696,18 +2083,33 @@ function applyScheduleSlot(slots: ScheduleSlot[] | undefined, nextSlot: Schedule
 
 export function setTodoScheduleSlot(todo: TodoFlow, slot: ScheduleSlot): TodoFlow {
   const scheduleSlots = applyScheduleSlot(todo.scheduleSlots, slot);
-  const dateKeys = getScheduleSlotDateKeys(scheduleSlots);
-  const totalDuration = scheduleSlots.reduce(
-    (total, item) => total + secondsBetweenTimeStrings(item.startTime, item.endTime),
-    0
-  );
-
-  return {
+  const dateKeys = getTodoScheduleDateKeys({ ...todo, scheduleSlots });
+  const currentEstimate = Math.max(0, Math.floor(todo.estimatedTimeTodo || 0));
+  const slotDuration = secondsBetweenTimeStrings(slot.startTime, slot.endTime);
+  const taskTotal = getTodoTaskEstimatedSeconds(todo);
+  const nextEstimate = Math.max(currentEstimate, slotDuration, taskTotal);
+  const nextTodo = {
     ...todo,
     scheduleSlots,
     scheduledDate: dateKeys[0],
     scheduledDates: dateKeys.length > 1 ? dateKeys : undefined,
-    estimatedTimeTodo: totalDuration,
+    estimatedTimeTodo: nextEstimate,
+    lastNotifiedDate: undefined,
+  };
+  const ensuredTodo = ensureTodoDayPlans(nextTodo);
+  const existingPlan = ensuredTodo.dayPlans?.[slot.dateKey];
+
+  return {
+    ...ensuredTodo,
+    dayPlans: {
+      ...(ensuredTodo.dayPlans || {}),
+      [slot.dateKey]: normalizeTodoDayPlan(ensuredTodo, slot.dateKey, {
+        ...(existingPlan || createTodoDayPlan(ensuredTodo, slot.dateKey)),
+        dateKey: slot.dateKey,
+        scheduleSlot: { ...slot },
+        estimatedTimeTodo: Math.max(existingPlan?.estimatedTimeTodo ?? nextEstimate, taskTotal),
+      }),
+    },
     lastNotifiedDate: undefined,
   };
 }
@@ -876,29 +2278,20 @@ export function syncTodoTaskEstimatesWithDuration(todo: TodoFlow, totalEstimated
     const task = todo.tasks[id];
     return task && !task.isTaskBreak;
   });
+  const safeTotal = Math.max(0, Math.floor(totalEstimatedSeconds));
 
   if (taskIds.length === 0) {
     return {
       ...todo,
-      estimatedTimeTodo: Math.max(0, Math.floor(totalEstimatedSeconds)),
+      estimatedTimeTodo: safeTotal,
       taskTotal: 0,
     };
   }
 
-  const syncedTasks = createDefaultTasksForSchedule(totalEstimatedSeconds, taskIds);
-  const syncedTaskById = Object.fromEntries(syncedTasks.map((task) => [task.id, task.estimatedTime]));
-  const tasks = Object.fromEntries(
-    Object.entries(todo.tasks).map(([id, task]) => [
-      id,
-      syncedTaskById[id] === undefined ? task : { ...task, estimatedTime: syncedTaskById[id] },
-    ])
-  ) as Record<string, Task>;
-
   return {
     ...todo,
-    tasks,
     taskTotal: taskIds.length,
-    estimatedTimeTodo: Math.max(0, Math.floor(totalEstimatedSeconds)),
+    estimatedTimeTodo: Math.max(safeTotal, getTodoTaskEstimatedSeconds(todo)),
   };
 }
 

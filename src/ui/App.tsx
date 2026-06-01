@@ -7,6 +7,8 @@ import Manage from './Pages/Manage/Manage';
 import Analytics from './Pages/Analytics/Analytics';
 import AiFlow from './Pages/AiFlow/AiFlow';
 import Settings from './Pages/Setting/Settings';
+import TodoflowSettings from './Pages/TodoflowSettings/TodoflowSettings';
+import TodoTimeEditor from './Pages/TodoTimeEditor/TodoTimeEditor';
 import DefaultLayout from './layouts/DefaultLayout';
 import Todoflow from './Pages/Todoflow/Todoflow';
 import ScheduleEditor from './Pages/ScheduleEditor/ScheduleEditor';
@@ -40,6 +42,8 @@ function App() {
   const [isDarkTheme, setIsDarkTheme] = useState<boolean>(
     localStorage.getItem('isDarkTheme') === 'false' ? false : true
   );
+  const [isInitializing, setIsInitializing] = useState(true);
+  const [startupError, setStartupError] = useState<string | null>(null);
   const soundPlayer = SoundPlayer.getInstance();
 
 
@@ -59,6 +63,7 @@ function App() {
   useEffect(() => {
     const handleLoadSettings = async () =>{
       try{
+        setStartupError(null);
         const settings = await window.electronAPI.getSettings();
         if(settings){
           localStorage.setItem('settings', JSON.stringify(settings));
@@ -87,6 +92,9 @@ function App() {
         }
       }catch(err){
         console.error('Failed to load settings on app start:', err);
+        setStartupError('Startup settings could not be loaded. Default settings are active.');
+      } finally {
+        setIsInitializing(false);
       }
     }
 
@@ -102,9 +110,26 @@ function App() {
     handleSetThemeOnStart();
   }, []);
 
+  if (isInitializing) {
+    return (
+      <div className="startup-screen drag-area">
+        <div className="startup-mark">DailyFlow</div>
+        <div className="startup-status">
+          <span className="startup-spinner" aria-hidden="true" />
+          <span>Initializing workspace</span>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <Provider store={store}>
       <ThemeContext.Provider value={{ isDarkTheme, toggleTheme }}>
+          {startupError && (
+            <div className="startup-error no-drag" role="status">
+              {startupError}
+            </div>
+          )}
           <Routes>
             <Route path="/schedule-editor" element={<ScheduleEditor />} />
             <Route path="/" element={<DefaultLayout><Dashboard /></DefaultLayout>} />
@@ -114,6 +139,8 @@ function App() {
             <Route path="/ai" element={<DefaultLayout><AiFlow /></DefaultLayout>} />
             <Route path="/setting" element={<DefaultLayout><Settings /></DefaultLayout>} />
             <Route path="/todoflow" element={<DefaultLayout><Todoflow /></DefaultLayout>} />
+            <Route path="/todoflow-setting" element={<DefaultLayout><TodoflowSettings /></DefaultLayout>} />
+            <Route path="/todoflow-time-editor" element={<TodoTimeEditor />} />
             <Route path="/ontask" element={<DefaultLayout><OnTask /></DefaultLayout>} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

@@ -17,15 +17,26 @@ const withoutRuntimeTimer = (todo: TodoFlow): TodoFlow => ({ ...todo, timer: nul
 const Analytics = () => {
   const [todos, setTodos] = useState<TodoFlow[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   useResizePage(PageType.MAIN);
 
   const fetchItems = async () => {
-    const [allTodos, allTasks]: [TodoFlow[], Task[]] = await Promise.all([
-      window.electronAPI.todoGetAll(),
-      window.electronAPI.taskGetAll(),
-    ]);
-    setTodos(allTodos.map(withoutRuntimeTimer));
-    setTasks(allTasks);
+    try {
+      setIsLoading(true);
+      setLoadError(null);
+      const [allTodos, allTasks]: [TodoFlow[], Task[]] = await Promise.all([
+        window.electronAPI.todoGetAll(),
+        window.electronAPI.taskGetAll(),
+      ]);
+      setTodos(allTodos.map(withoutRuntimeTimer));
+      setTasks(allTasks);
+    } catch (error) {
+      console.error('Failed to load analytics data:', error);
+      setLoadError('Failed to load analytics data.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -54,11 +65,23 @@ const Analytics = () => {
     <div className="analytics-page">
       <div className="analytics-header">
         <h1 className="text-2xl font-bold text-highlight">Analytics</h1>
-        <button className="btn btn-secondary dashboard-month-button" onClick={fetchItems}>
-          Refresh
-        </button>
       </div>
 
+      {isLoading && (
+        <div className="async-page-state" role="status">
+          <div className="startup-spinner" />
+          <span>Loading analytics</span>
+        </div>
+      )}
+
+      {!isLoading && loadError && (
+        <div className="async-page-state error" role="alert">
+          <span>{loadError}</span>
+        </div>
+      )}
+
+      {!isLoading && !loadError && (
+      <>
       <section className="analytics-metrics">
         <div className="analytics-metric card">
           <span>TodoFlows</span>
@@ -129,6 +152,8 @@ const Analytics = () => {
           )}
         </div>
       </section>
+      </>
+      )}
     </div>
   );
 };

@@ -1,5 +1,5 @@
 import { app, ipcMain, screen, dialog, Notification, nativeImage } from 'electron';
-import { taskStore, todoStore } from './util.jsondata.js';
+import { aiAnalysisHistoryStore, taskStore, todoArchiveStore, todoStore } from './util.jsondata.js';
 import Store from 'electron-store';
 import { 
   closeAllExceptMain, 
@@ -7,6 +7,7 @@ import {
   closeWindowsByType, 
   createWindow, 
   createScheduleEditorWindow,
+  createTodoTimeEditorWindow,
   focusWindow, 
   getAllWindows, 
   GetCurrentPosition, 
@@ -18,6 +19,7 @@ import {
 import { IpcMainName } from '../enums/IpcMain.Name.enum.js';
 import { getIconPath } from '../pathResolver.js';
 import { requestAiProvider, type AiProviderRequest } from './aiProvider.js';
+import { splitExpiredAssignedTodos } from './todoCleanup.js';
 let store: any = new Store({ name: 'settings' });
 export const setupIpcMainHandlers = () => {
   ipcMain.handle(IpcMainName.SET_WINDOW_ALWAYS_ON_TOP, async (event, windowId: string, isAlwaysOnTop: boolean) => {
@@ -45,6 +47,21 @@ export const setupIpcMainHandlers = () => {
       mainWindow.focus();
     }
     closeWindow('schedule-editor');
+    return true;
+  });
+
+  ipcMain.handle(IpcMainName.OPEN_TODO_TIME_EDITOR_WINDOW, async (event, payload) => {
+    return await createTodoTimeEditorWindow(payload);
+  });
+
+  ipcMain.handle(IpcMainName.COMPLETE_TODO_TIME_EDITOR, async (event, payload) => {
+    const mainWindow = windows.get('main')?.window;
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send(IpcMainName.COMPLETE_TODO_TIME_EDITOR, payload);
+      mainWindow.show();
+      mainWindow.focus();
+    }
+    closeWindow('todo-time-editor');
     return true;
   });
 
@@ -119,7 +136,21 @@ export const setupIpcMainHandlers = () => {
   });
 
   ipcMain.handle(IpcMainName.TODO_GET_ALL, async () => {
-    return await todoStore.getAll();
+    let nextActiveTodos: any[] = [];
+    let archivedSummaries: any[] = [];
+
+    await todoStore.updateAll(({ items: allTodos }) => {
+      const cleanupResult = splitExpiredAssignedTodos(allTodos);
+      nextActiveTodos = cleanupResult.activeTodos;
+      archivedSummaries = cleanupResult.archivedSummaries;
+      return { items: cleanupResult.expiredTodos.length > 0 || cleanupResult.archivedSummaries.length > 0 ? cleanupResult.activeTodos : allTodos };
+    });
+
+    if (archivedSummaries.length > 0) {
+      await todoArchiveStore.updateAll(({ items }) => ({ items: [...items, ...archivedSummaries] }));
+    }
+
+    return nextActiveTodos;
   });
 
   ipcMain.handle(IpcMainName.TODO_GET_BY_ID, async (event, id) => {
@@ -157,6 +188,31 @@ export const setupIpcMainHandlers = () => {
       
       await todoStore.update(todo.id, todo);
     }
+  });
+
+  ipcMain.handle(IpcMainName.TODO_ARCHIVE_GET_ALL, async () => {
+    return await todoArchiveStore.getAll();
+  });
+
+  ipcMain.handle(IpcMainName.TODO_ARCHIVE_CLEAR, async () => {
+    return await todoArchiveStore.clear();
+  });
+
+  ipcMain.handle(IpcMainName.AI_ANALYSIS_HISTORY_GET_ALL, async () => {
+    const items = await aiAnalysisHistoryStore.getAll();
+    return [...items].sort((a: any, b: any) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
+  });
+
+  ipcMain.handle(IpcMainName.AI_ANALYSIS_HISTORY_UPSERT, async (event, entry) => {
+    return await aiAnalysisHistoryStore.upsert(entry);
+  });
+
+  ipcMain.handle(IpcMainName.AI_ANALYSIS_HISTORY_REMOVE, async (event, id: string) => {
+    return await aiAnalysisHistoryStore.remove(id);
+  });
+
+  ipcMain.handle(IpcMainName.AI_ANALYSIS_HISTORY_CLEAR, async () => {
+    return await aiAnalysisHistoryStore.clear();
   });
 
   // Screen and Window Information
@@ -254,6 +310,8 @@ export const setupIpcMainHandlers = () => {
       
       await taskStore.clear();
       await todoStore.clear();
+      await todoArchiveStore.clear();
+      await aiAnalysisHistoryStore.clear();
       return true;
     } catch (err) {
       console.error('delete-all-data error:', err);
@@ -272,6 +330,17 @@ export const setupIpcMainHandlers = () => {
   ) => {
     const windowData = windows.get(windowType);
     if (windowData) {
+      const currentBounds = windowData.window.getBounds();
+      const isSameBounds =
+        currentBounds.width === targetWidth &&
+        currentBounds.height === targetHeight &&
+        currentBounds.x === targetPosition.x &&
+        currentBounds.y === targetPosition.y;
+
+      if (isSameBounds) {
+        return true;
+      }
+
       smoothResizeAndMove(
         windowData.window, 
         targetWidth, 

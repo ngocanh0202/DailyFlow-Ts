@@ -2,9 +2,12 @@ interface Window {
   electronAPI: {
     // Window operations
     createWindow: (windowType: string) => Promise<void>;
-    openScheduleEditorWindow: (payload: { dateKeys: string[]; todoId?: string }) => Promise<void>;
-    completeScheduleEditor: (payload: { todo: TodoFlow; mode: 'create' | 'edit' }) => Promise<void>;
-    onScheduleEditorCompleted: (callback: (payload: { todo: TodoFlow; mode: 'create' | 'edit' }) => void) => () => void;
+    openScheduleEditorWindow: (payload: ScheduleEditorOpenPayload) => Promise<void>;
+    completeScheduleEditor: (payload: ScheduleEditorCompletePayload) => Promise<void>;
+    onScheduleEditorCompleted: (callback: (payload: ScheduleEditorCompletePayload) => void) => () => void;
+    openTodoTimeEditorWindow: (payload: TodoTimeEditorOpenPayload) => Promise<void>;
+    completeTodoTimeEditor: (payload: TodoTimeEditorCompletePayload) => Promise<void>;
+    onTodoTimeEditorCompleted: (callback: (payload: TodoTimeEditorCompletePayload) => void) => () => void;
     closeWindow: (windowId: string) => Promise<void>;
     closeWindowsByType: (windowType: string) => Promise<void>;
     closeAllExceptMain: () => Promise<void>;
@@ -28,6 +31,12 @@ interface Window {
     todoRemove: (id: string) => Promise<void>;
     todoClear: () => Promise<void>;
     todoReset: () => Promise<void>;
+    todoArchiveGetAll: () => Promise<ArchivedTodoSummary[]>;
+    todoArchiveClear: () => Promise<void>;
+    aiAnalysisHistoryGetAll: () => Promise<AiAnalysisHistoryEntry[]>;
+    aiAnalysisHistoryUpsert: (entry: AiAnalysisHistoryEntry) => Promise<AiAnalysisHistoryEntry>;
+    aiAnalysisHistoryRemove: (id: string) => Promise<boolean>;
+    aiAnalysisHistoryClear: () => Promise<void>;
     // Get user screen size
     getUserScreenSize: () => Promise<{ width: number; height: number }>;
     // Window configuration access
@@ -50,10 +59,11 @@ interface Window {
         icon?: string;
     }) => Promise<boolean>;
     aiRequest: (payload: {
-        provider: 'openai' | 'anthropic' | 'gemini';
+        provider: 'openai' | 'anthropic' | 'gemini' | 'custom';
         model: string;
         apiKey: string;
         prompt: string;
+        customUrl?: string;
     }) => Promise<string>;
     // App settings
     getSettings: () => Promise<AppSettings>;
@@ -102,4 +112,89 @@ interface AppSettings {
   soundEnabled: boolean;
   startupSoundEnabled: boolean;
   volume: number;
+}
+
+interface ScheduleEditorOpenPayload {
+  dateKeys: string[];
+  todoId?: string;
+  taskId?: string;
+  returnTo?: string;
+  activeDateKey?: string;
+}
+
+interface ScheduleEditorCompletePayload {
+  todo: TodoFlow;
+  mode: 'create' | 'edit';
+  returnTo?: string | null;
+  activeDateKey?: string | null;
+}
+
+interface TodoTimeEditorOpenPayload {
+  todoId: string;
+  returnTo?: string;
+  activeDateKey?: string;
+}
+
+interface TodoTimeEditorCompletePayload {
+  todo: TodoFlow;
+  returnTo?: string | null;
+  activeDateKey?: string | null;
+}
+
+interface TodoFlowDayTaskState {
+  estimatedTime: number;
+  actualTime: number;
+  status: TaskStatus;
+}
+
+interface TodoFlowDayPlan {
+  dateKey: string;
+  scheduleSlot?: ScheduleSlot;
+  status: TodoStatus;
+  estimatedTimeTodo: number;
+  actualTimeTodo: number;
+  taskCompleted: number;
+  taskTotal: number;
+  taskAllocations: Record<string, TodoFlowDayTaskState>;
+  currentTaskId?: string;
+  timeLeft?: number;
+  lastNotifiedDate?: string;
+}
+
+interface ArchivedTodoTaskSummary {
+  taskId: string;
+  title: string;
+  status: string;
+  completed: boolean;
+  estimatedTime: number;
+  actualTime: number;
+  timeRatio: number;
+}
+
+interface ArchivedTodoSummary {
+  id: string;
+  todoId: string;
+  note: string;
+  removedDateKeys: string[];
+  archivedAt: string;
+  scheduleSlots: ScheduleSlot[];
+  totalEstimatedTime: number;
+  totalActualTime: number;
+  taskCompleted: number;
+  taskTotal: number;
+  tasks: ArchivedTodoTaskSummary[];
+}
+
+interface AiAnalysisHistoryEntry {
+  id: string;
+  kind?: 'analysis' | 'draft';
+  createdAt: string;
+  provider: string;
+  model: string;
+  mode?: 'today_plan' | 'workload_review' | 'estimate_review';
+  outputLanguage: 'vi' | 'en' | 'ja';
+  userRequest: string;
+  summary: string;
+  rawResponse: string;
+  result: any;
 }

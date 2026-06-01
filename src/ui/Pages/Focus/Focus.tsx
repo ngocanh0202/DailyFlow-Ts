@@ -18,6 +18,8 @@ import { TodoStatus } from '~/enums/TodoStatus.Type.enum';
 import { FaMinus } from "react-icons/fa6";
 import SoundPlayer from '~/ui/helpers/utils/SoundPlayer';
 import { SoundType } from '~/enums/Sound.Type.enum';
+import { mainWindowResizeState } from '~/ui/helpers/utils/pageResizeState';
+import { getPersistableTodoDateState } from '~/ui/helpers/utils/scheduleUtils';
 
 
 const Focus = () => {
@@ -29,6 +31,7 @@ const Focus = () => {
   const [isTitleHovered, setisTitleHovered] = useState(false);
   const [isTimeHovered, setisTimeHovered] = useState(false);
   const [isExpanded, setIsExpanded] = useState<boolean>(false);
+  const [pendingFocusAction, setPendingFocusAction] = useState<string | null>(null);
   const dispatch = useAppDispatch();
   const todo = useAppSelector((state) => state.todoflow);
   const {  
@@ -44,10 +47,10 @@ const Focus = () => {
     if (!nextTodo.id || !nextTodo.note.trim()) return;
 
     try {
-      const persistableTodo = getPersistableTodo(nextTodo);
-      await window.electronAPI.todoUpsert(persistableTodo);
-      for (const taskId of persistableTodo.taskIds) {
-        const task = persistableTodo.tasks[taskId];
+      const persistedTodo = getPersistableTodoDateState(getPersistableTodo(nextTodo));
+      await window.electronAPI.todoUpsert(persistedTodo);
+      for (const taskId of persistedTodo.taskIds) {
+        const task = persistedTodo.tasks[taskId];
         if (task) {
           await window.electronAPI.taskUpsert(task);
         }
@@ -70,7 +73,9 @@ const Focus = () => {
           dispatch(setCurrentTaskId(firstTaskId));
         }
       }
-      startTimer();
+      if (todo.timer == null) {
+        startTimer();
+      }
     }
 
     getHeadTask();
@@ -118,6 +123,7 @@ const Focus = () => {
     const handleUpdateTodo = async () => {
       if (todo) {
         try {
+          setPendingFocusAction('Saving focus progress');
           await persistTodo();
           if (todo.status === TodoStatus.STOP || todo.status === TodoStatus.START_ON_TODO) {
             handleToWinOnTop(false);
@@ -125,6 +131,8 @@ const Focus = () => {
           }
         } catch (err) {
           console.error('Failed to update todo:', err);
+        } finally {
+          setPendingFocusAction(null);
         }
       }
     }
@@ -159,10 +167,15 @@ const Focus = () => {
       if (isExpanded) {
         pageType = PageType.FOCUS_EXPANDED;
       }
+      if (!mainWindowResizeState.shouldResize(pageType)) {
+        return;
+      }
+
       const {width, height} = getPageSize(pageType);
       const { width: currentWidth, height: currentHeight} = await window.electronAPI.getUserScreenSize();
       await window.electronAPI.smoothResizeAndMove('main', width, height, 24, 
         getOnTopRightInScreen(currentWidth, currentHeight, width, height));
+      mainWindowResizeState.markResized(pageType);
     }
     handleToResize();
   }, [isExpanded]);
@@ -203,6 +216,7 @@ const Focus = () => {
         soundPlayer.play(SoundType.SOUND_SHINDERU);
       else
         soundPlayer.play(SoundType.SOUND_BOCCHI);
+      dispatch(setStopTimer());
       dispatch(setTaskStatus(TaskStatus.COMPLETED));
       dispatch(setTodoStatus(TodoStatus.STOP));
     }
@@ -214,7 +228,7 @@ const Focus = () => {
 
   const canChangeTask = todo.currentTaskId && todo.tasks[todo.currentTaskId]?.isTaskBreak;
   const isCurrentTaskBreak = todo.currentTaskId && todo.tasks[todo.currentTaskId]?.isTaskBreak;
-  const isPaused = todo.timer;
+  const isPaused = todo.timer != null;
 
 
   return (
@@ -313,6 +327,12 @@ const Focus = () => {
           </div>
         : null
       }
+      {pendingFocusAction && (
+        <div className="async-blocking-overlay no-drag" role="status">
+          <div className="startup-spinner" />
+          <span>{pendingFocusAction}</span>
+        </div>
+      )}
 
     </div>
   );

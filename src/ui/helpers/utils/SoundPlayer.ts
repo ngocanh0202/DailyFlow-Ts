@@ -34,6 +34,10 @@ class SoundPlayer {
         });
     }
 
+    private isInterruptedPlayError(error: unknown): boolean {
+        return error instanceof DOMException && error.name === 'AbortError';
+    }
+
     public play(key: SoundType): void {
         if (!this.soundEnabled) {
             return;
@@ -70,10 +74,18 @@ class SoundPlayer {
                     this.isPlaying = true;
                 })
                 .catch((error) => {
+                    if (this.isInterruptedPlayError(error)) {
+                        this.isPlaying = false;
+                        return;
+                    }
                     console.warn(`Failed to play audio "${key}":`, error);
                     this.isPlaying = false;
                 });
         } catch (error) {
+            if (this.isInterruptedPlayError(error)) {
+                this.isPlaying = false;
+                return;
+            }
             console.warn(`Failed to start audio "${key}":`, error);
             this.isPlaying = false;
         }

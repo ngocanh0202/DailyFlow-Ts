@@ -7,7 +7,7 @@
     "src/assets",
     "localdata"
   ],
-  "icon": "./desktopIcon.png",
+  "icon": "./desktopIcon512x512.png",
   "directories": {
     "output": "release"
   },
@@ -15,10 +15,11 @@
     "target": "dmg"
   },
   "linux": {
-    "target": "AppImage",
+    "target": "tar.gz",
     "category": "Utility"
   },
   "win": {
-    "target": ["nsis", "portable"]
+    "target": ["nsis", "portable"],
+    "signAndEditExecutable": false
   }
 }

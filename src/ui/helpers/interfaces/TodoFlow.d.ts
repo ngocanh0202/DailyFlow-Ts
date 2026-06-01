@@ -4,6 +4,26 @@ interface ScheduleSlot {
   endTime: string;
 }
 
+interface TodoFlowDayTaskState {
+  estimatedTime: number;
+  actualTime: number;
+  status: TaskStatus;
+}
+
+interface TodoFlowDayPlan {
+  dateKey: string;
+  scheduleSlot?: ScheduleSlot;
+  status: TodoStatus;
+  estimatedTimeTodo: number;
+  actualTimeTodo: number;
+  taskCompleted: number;
+  taskTotal: number;
+  taskAllocations: Record<string, TodoFlowDayTaskState>;
+  currentTaskId?: string;
+  timeLeft?: number;
+  lastNotifiedDate?: string;
+}
+
 interface TodoFlow {
   id: string;
   note: string;
@@ -20,5 +40,7 @@ interface TodoFlow {
   scheduledDate?: string;
   scheduledDates?: string[];
   scheduleSlots?: ScheduleSlot[];
+  dayPlans?: Record<string, TodoFlowDayPlan>;
+  activeDateKey?: string;
   lastNotifiedDate?: string;
 }

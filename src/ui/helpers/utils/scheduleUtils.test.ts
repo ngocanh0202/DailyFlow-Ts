@@ -3,24 +3,51 @@ import { TaskStatus } from '~/enums/TaskStatus.Type.enum';
 import { TodoStatus } from '~/enums/TodoStatus.Type.enum';
 import {
   buildMonthDays,
+  buildCalendarWindowDays,
+  getMonthCalendarGridStart,
   createDefaultTasksForSchedule,
   createScheduledTodoFlow,
+  applyTodoDateState,
   createTodoFlowFromTask,
   createAiTodoFlowPrompt,
   createAiTodoFlowAnalysisPrompt,
+  createTodoFlowFromAiDraft,
+  buildAiTodoFlowAnalysisContext,
+  createAiAnalysisHistoryEntry,
+  createAiTodoFlowDraftHistoryEntry,
+  parseAiTodoFlowAnalysisResult,
+  parseAiTodoFlowDraftResult,
+  addTaskWithProportionalEstimate,
   filterManageItems,
+  filterTodoFlowsAssignableToDateSelection,
   formatDateChipLabels,
   formatDateChipItems,
   formatDateKeyList,
   formatScheduleSlotChipLabels,
   findAutoFitScheduleSlot,
+  getTodoForDate,
+  getPersistableTodoDateState,
+  getTodoDayPlan,
   getTodoFlowAnalytics,
+  getTodoEstimatedSeconds,
+  getRenderableTodoFlowTaskIds,
+  getTodoFlowCurrentTask,
+  getTodoScheduleMinimumSlotDurationSeconds,
+  getTodoScheduleMinimumTotalDurationSeconds,
+  getTodoScheduleSelectionDurationSeconds,
+  getTodoScheduleSelectionRangeMinutes,
+  getTodoScheduleSaveEstimateDurationSeconds,
+  getTodoScheduleSlotTargetDurationSeconds,
+  getTodoScheduleTargetDurationSeconds,
   getScheduleSlotForDate,
   getDueNotificationItems,
   getDueSlotNotificationItems,
   getTodoFlowLaunchLabel,
   getTodoScheduleDateKeys,
   getTodoTaskEstimatedSeconds,
+  hasAiTodoFlowContextData,
+  resizeTodoFlowScheduleDuration,
+  canResumeTodoFlowEntry,
   groupScheduledItemsByDate,
   groupScheduledItemsForDateRange,
   hasOverlappingScheduleSlot,
@@ -31,10 +58,16 @@ import {
   moveScheduleSlotPreservingDuration,
   splitTodoFlowForDate,
   resetTodoFlowProgress,
+  redistributeTaskEstimateWithinTodo,
+  reorderTodoTaskIds,
+  resizeTaskAllocationBoundary,
+  resizeTaskAllocationBoundaryFromDrag,
   secondsBetweenTimeStrings,
   setTaskScheduleSlot,
   setTodoAssignedDate,
+  setTodoAssignedDates,
   setTodoScheduleSlot,
+  ensureTodoDayPlans,
   syncTodoTaskEstimatesWithDuration,
   toggleDateKeySelection,
   unsetTodoAssignedDate,
@@ -76,6 +109,20 @@ describe('scheduleUtils', () => {
     expect(days.length).toBeGreaterThanOrEqual(35);
     expect(days[0].dateKey).toBe('2026-04-26');
     expect(days.some((day) => day.dateKey === '2026-05-12' && day.isCurrentMonth)).toBe(true);
+  });
+
+  it('returns the calendar grid start for the requested month', () => {
+    const gridStart = getMonthCalendarGridStart(new Date(2026, 4, 19));
+    expect(toDateKey(gridStart)).toBe('2026-04-26');
+  });
+
+  it('builds a rolling calendar window from the requested week', () => {
+    const days = buildCalendarWindowDays(new Date(2026, 4, 13), new Date(2026, 4, 18));
+
+    expect(days).toHaveLength(42);
+    expect(days[0].dateKey).toBe('2026-05-10');
+    expect(days[41].dateKey).toBe('2026-06-20');
+    expect(days.some((day) => day.dateKey === '2026-05-18' && day.isToday)).toBe(true);
   });
 
   it('groups scheduled todos and standalone tasks by date', () => {
@@ -121,6 +168,32 @@ describe('scheduleUtils', () => {
     expect(created.scheduledDates).toEqual(['2026-05-13', '2026-05-14']);
   });
 
+  it('returns only renderable TodoFlow task ids when persisted task data is stale', () => {
+    const staleTodo: TodoFlow = {
+      ...todo('todo-1', 'Plan'),
+      currentTaskId: 'missing-current',
+      taskIds: ['task-1', 'missing-task', 'task-1', 'task-2', 'task-3'],
+      tasks: {
+        'task-1': task('task-1', 'Write'),
+        'task-2': { ...task('task-2', 'Done'), status: TaskStatus.COMPLETED },
+        'task-3': task('task-3', 'Review'),
+      },
+    };
+
+    expect(getTodoFlowCurrentTask(staleTodo)).toBeUndefined();
+    expect(getRenderableTodoFlowTaskIds(staleTodo)).toEqual(['task-1', 'task-3']);
+  });
+
+  it('deduplicates Manage items by id before rendering filter results', () => {
+    const duplicatedTodos = [todo('todo-1', 'Plan'), todo('todo-1', 'Plan duplicate')];
+    const duplicatedTasks = [task('task-1', 'Write'), task('task-1', 'Write duplicate'), task('task-2', 'Review')];
+
+    const filtered = filterManageItems(duplicatedTodos, duplicatedTasks, '', 'all');
+
+    expect(filtered.todos.map((item) => item.id)).toEqual(['todo-1']);
+    expect(filtered.tasks.map((item) => item.id)).toEqual(['task-1', 'task-2']);
+  });
+
   it('groups a multi-date TodoFlow into each assigned calendar date', () => {
     const grouped = groupScheduledItemsByDate(
       [{ ...todo('todo-1', 'Multi-day plan'), scheduledDates: ['2026-05-13', '2026-05-14'] }],
@@ -153,6 +226,16 @@ describe('scheduleUtils', () => {
     ).toEqual(['2026-05-13', '2026-05-14']);
   });
 
+  it('keeps assigned dates that do not have schedule slots yet', () => {
+    expect(
+      getTodoScheduleDateKeys({
+        ...todo('todo-1', 'Plan', '2026-05-12'),
+        scheduledDates: ['2026-05-13', '2026-05-14'],
+        scheduleSlots: [{ dateKey: '2026-05-13', startTime: '08:00', endTime: '09:00' }],
+      })
+    ).toEqual(['2026-05-13', '2026-05-14']);
+  });
+
   it('adds a calendar date to an existing TodoFlow without replacing other assigned dates', () => {
     const updated = setTodoAssignedDate(
       { ...todo('todo-1', 'Plan', '2026-05-13'), scheduledDates: ['2026-05-13', '2026-05-14'] },
@@ -164,8 +247,60 @@ describe('scheduleUtils', () => {
     expect(updated.lastNotifiedDate).toBeUndefined();
   });
 
+  it('sets multiple assigned dates without changing TodoFlow estimated time', () => {
+    const source = {
+      ...todo('todo-1', 'Plan'),
+      estimatedTimeTodo: 5400,
+      scheduleSlots: [{ dateKey: '2026-05-13', startTime: '09:00', endTime: '10:30' }],
+    };
+
+    const updated = setTodoAssignedDates(source, ['2026-05-15', '2026-05-14', '2026-05-14']);
+
+    expect(updated.scheduledDate).toBe('2026-05-14');
+    expect(updated.scheduledDates).toEqual(['2026-05-14', '2026-05-15']);
+    expect(updated.scheduleSlots).toBeUndefined();
+    expect(updated.estimatedTimeTodo).toBe(5400);
+  });
+
+  it('uses TodoFlow estimated time as schedule target when no slots exist', () => {
+    expect(getTodoScheduleTargetDurationSeconds({ ...todo('todo-1', 'Plan'), estimatedTimeTodo: 7200 })).toBe(7200);
+    expect(
+      getTodoScheduleTargetDurationSeconds({
+        ...todo('todo-1', 'Plan'),
+        estimatedTimeTodo: 7200,
+        scheduleSlots: [{ dateKey: '2026-05-14', startTime: '09:00', endTime: '10:30' }],
+      })
+    ).toBe(5400);
+  });
+
+  it('uses total slot duration as the TodoFlow schedule target for multi-day TodoFlows', () => {
+    expect(
+      getTodoScheduleTargetDurationSeconds({
+        ...todo('todo-1', 'Plan'),
+        estimatedTimeTodo: 18000,
+        scheduleSlots: [
+          { dateKey: '2026-05-14', startTime: '09:00', endTime: '11:30' },
+          { dateKey: '2026-05-15', startTime: '09:00', endTime: '11:30' },
+        ],
+      })
+    ).toBe(18000);
+  });
+
+  it('uses per-day slot duration as the slot target for multi-day TodoFlows', () => {
+    expect(
+      getTodoScheduleSlotTargetDurationSeconds({
+        ...todo('todo-1', 'Plan'),
+        estimatedTimeTodo: 18000,
+        scheduleSlots: [
+          { dateKey: '2026-05-14', startTime: '09:00', endTime: '11:30' },
+          { dateKey: '2026-05-15', startTime: '09:00', endTime: '11:30' },
+        ],
+      })
+    ).toBe(9000);
+  });
+
   it('sets a TodoFlow schedule slot and updates estimated time from duration', () => {
-    const updated = setTodoScheduleSlot(todo('todo-1', 'Plan'), {
+    const updated = setTodoScheduleSlot({ ...todo('todo-1', 'Plan'), estimatedTimeTodo: 0 }, {
       dateKey: '2026-05-13',
       startTime: '09:15',
       endTime: '11:45',
@@ -176,25 +311,520 @@ describe('scheduleUtils', () => {
     ]);
     expect(updated.scheduledDate).toBe('2026-05-13');
     expect(updated.estimatedTimeTodo).toBe(9000);
+    expect(getTodoDayPlan(updated, '2026-05-13')?.scheduleSlot).toEqual({
+      dateKey: '2026-05-13',
+      startTime: '09:15',
+      endTime: '11:45',
+    });
+    expect(getTodoDayPlan(updated, '2026-05-13')?.estimatedTimeTodo).toBe(9000);
   });
 
-  it('sets TodoFlow estimated time from the total duration of all schedule slots', () => {
-    const firstSlot = setTodoScheduleSlot(todo('todo-1', 'Plan'), {
+  it('keeps unslotted assigned dates when setting one TodoFlow schedule slot', () => {
+    const updated = setTodoScheduleSlot(
+      {
+        ...todo('todo-1', 'Plan'),
+        scheduledDates: ['2026-05-14', '2026-05-15'],
+        estimatedTimeTodo: 3600,
+      },
+      { dateKey: '2026-05-14', startTime: '09:00', endTime: '10:00' }
+    );
+
+    expect(updated.scheduledDate).toBe('2026-05-14');
+    expect(updated.scheduledDates).toEqual(['2026-05-14', '2026-05-15']);
+    expect(getTodoScheduleDateKeys(updated)).toEqual(['2026-05-14', '2026-05-15']);
+  });
+
+  it('does not set a TodoFlow schedule estimate below the current tasks total', () => {
+    const updated = setTodoScheduleSlot(
+      {
+        ...todo('todo-1', 'Plan'),
+        estimatedTimeTodo: 0,
+        taskIds: ['task-1', 'task-2'],
+        tasks: {
+          'task-1': { ...task('task-1', 'First'), estimatedTime: 3600 },
+          'task-2': { ...task('task-2', 'Second'), estimatedTime: 1800 },
+        },
+      },
+      {
+        dateKey: '2026-05-13',
+        startTime: '09:00',
+        endTime: '10:00',
+      }
+    );
+
+    expect(updated.estimatedTimeTodo).toBe(5400);
+    expect(getTodoDayPlan(updated, '2026-05-13')?.estimatedTimeTodo).toBe(5400);
+  });
+
+  it('keeps existing TodoFlow estimated time when assigning repeated schedule slots', () => {
+    const source = { ...todo('todo-1', 'Plan'), estimatedTimeTodo: 9000 };
+    const firstSlot = setTodoScheduleSlot(source, {
       dateKey: '2026-05-13',
       startTime: '09:00',
-      endTime: '10:00',
+      endTime: '11:30',
     });
     const updated = setTodoScheduleSlot(firstSlot, {
       dateKey: '2026-05-14',
       startTime: '11:00',
-      endTime: '12:30',
+      endTime: '13:30',
     });
 
     expect(updated.scheduleSlots).toEqual([
-      { dateKey: '2026-05-13', startTime: '09:00', endTime: '10:00' },
-      { dateKey: '2026-05-14', startTime: '11:00', endTime: '12:30' },
+      { dateKey: '2026-05-13', startTime: '09:00', endTime: '11:30' },
+      { dateKey: '2026-05-14', startTime: '11:00', endTime: '13:30' },
     ]);
     expect(updated.estimatedTimeTodo).toBe(9000);
+  });
+
+  it('updates only the edited day plan when replacing one TodoFlow schedule slot', () => {
+    const source = ensureTodoDayPlans({
+      ...todo('todo-1', 'Plan'),
+      estimatedTimeTodo: 7200,
+      taskIds: ['task-1', 'task-2'],
+      tasks: {
+        'task-1': { ...task('task-1', 'First'), estimatedTime: 3600 },
+        'task-2': { ...task('task-2', 'Second'), estimatedTime: 3600 },
+      },
+      scheduleSlots: [
+        { dateKey: '2026-05-13', startTime: '09:00', endTime: '11:00' },
+        { dateKey: '2026-05-14', startTime: '14:00', endTime: '16:00' },
+      ],
+    });
+
+    const updated = setTodoScheduleSlot(source, {
+      dateKey: '2026-05-14',
+      startTime: '15:00',
+      endTime: '18:00',
+    });
+
+    expect(getTodoDayPlan(updated, '2026-05-14')?.scheduleSlot).toEqual({
+      dateKey: '2026-05-14',
+      startTime: '15:00',
+      endTime: '18:00',
+    });
+    expect(getTodoDayPlan(updated, '2026-05-14')?.estimatedTimeTodo).toBe(7200);
+    expect(getTodoDayPlan(updated, '2026-05-13')?.scheduleSlot).toEqual({
+      dateKey: '2026-05-13',
+      startTime: '09:00',
+      endTime: '11:00',
+    });
+  });
+
+  it('migrates a multi-day TodoFlow into one cloned day plan per assigned date', () => {
+    const source = {
+      ...todo('todo-1', 'Shared plan'),
+      estimatedTimeTodo: 7200,
+      actualTimeTodo: 600,
+      taskCompleted: 1,
+      taskTotal: 2,
+      currentTaskId: 'task-2',
+      timeLeft: 300,
+      taskIds: ['task-1', 'task-2'],
+      tasks: {
+        'task-1': { ...task('task-1', 'First'), estimatedTime: 2400, actualTime: 600, status: TaskStatus.COMPLETED },
+        'task-2': { ...task('task-2', 'Second'), estimatedTime: 4800, actualTime: 0, status: TaskStatus.IN_PROGRESS },
+      },
+      scheduleSlots: [
+        { dateKey: '2026-05-13', startTime: '09:00', endTime: '11:00' },
+        { dateKey: '2026-05-14', startTime: '14:00', endTime: '16:00' },
+      ],
+    };
+
+    const migrated = ensureTodoDayPlans(source);
+
+    expect(Object.keys(migrated.dayPlans || {})).toEqual(['2026-05-13', '2026-05-14']);
+    expect(getTodoDayPlan(migrated, '2026-05-13')).toEqual(expect.objectContaining({
+      dateKey: '2026-05-13',
+      estimatedTimeTodo: 7200,
+      actualTimeTodo: 600,
+      taskCompleted: 1,
+      taskTotal: 2,
+      currentTaskId: 'task-2',
+      timeLeft: 300,
+      scheduleSlot: { dateKey: '2026-05-13', startTime: '09:00', endTime: '11:00' },
+    }));
+    expect(getTodoDayPlan(migrated, '2026-05-14')?.taskAllocations['task-2']).toEqual({
+      estimatedTime: 4800,
+      actualTime: 0,
+      status: TaskStatus.IN_PROGRESS,
+    });
+  });
+
+  it('reads a TodoFlow through the selected day plan without changing other assigned days', () => {
+    const source = ensureTodoDayPlans({
+      ...todo('todo-1', 'Shared plan'),
+      estimatedTimeTodo: 7200,
+      actualTimeTodo: 0,
+      taskIds: ['task-1', 'task-2'],
+      tasks: {
+        'task-1': { ...task('task-1', 'First'), estimatedTime: 3600 },
+        'task-2': { ...task('task-2', 'Second'), estimatedTime: 3600 },
+      },
+      scheduleSlots: [
+        { dateKey: '2026-05-13', startTime: '09:00', endTime: '11:00' },
+        { dateKey: '2026-05-14', startTime: '14:00', endTime: '17:00' },
+      ],
+      dayPlans: {
+        '2026-05-14': {
+          dateKey: '2026-05-14',
+          scheduleSlot: { dateKey: '2026-05-14', startTime: '14:00', endTime: '17:00' },
+          status: TodoStatus.STOP,
+          estimatedTimeTodo: 10800,
+          actualTimeTodo: 120,
+          taskCompleted: 0,
+          taskTotal: 2,
+          taskAllocations: {
+            'task-1': { estimatedTime: 7200, actualTime: 120, status: TaskStatus.IN_PROGRESS },
+            'task-2': { estimatedTime: 3600, actualTime: 0, status: TaskStatus.NOT_STARTED },
+          },
+          currentTaskId: 'task-1',
+          timeLeft: 120,
+        },
+      },
+    });
+
+    const scoped = getTodoForDate(source, '2026-05-14');
+
+    expect(scoped.estimatedTimeTodo).toBe(10800);
+    expect(scoped.actualTimeTodo).toBe(120);
+    expect(scoped.currentTaskId).toBe('task-1');
+    expect(scoped.tasks['task-1'].estimatedTime).toBe(7200);
+    expect(scoped.tasks['task-1'].actualTime).toBe(120);
+    expect(scoped.tasks['task-1'].status).toBe(TaskStatus.IN_PROGRESS);
+    expect(getTodoForDate(source, '2026-05-13').tasks['task-1'].estimatedTime).toBe(3600);
+  });
+
+  it('normalizes a day plan estimate so it is not shorter than its task allocations', () => {
+    const source = ensureTodoDayPlans({
+      ...todo('todo-1', 'Shared plan'),
+      estimatedTimeTodo: 1800,
+      taskIds: ['task-1', 'task-2'],
+      tasks: {
+        'task-1': { ...task('task-1', 'First'), estimatedTime: 900 },
+        'task-2': { ...task('task-2', 'Second'), estimatedTime: 900 },
+      },
+      scheduleSlots: [{ dateKey: '2026-05-14', startTime: '14:00', endTime: '14:30' }],
+      dayPlans: {
+        '2026-05-14': {
+          dateKey: '2026-05-14',
+          scheduleSlot: { dateKey: '2026-05-14', startTime: '14:00', endTime: '14:30' },
+          status: TodoStatus.STOP,
+          estimatedTimeTodo: 1800,
+          actualTimeTodo: 0,
+          taskCompleted: 0,
+          taskTotal: 2,
+          taskAllocations: {
+            'task-1': { estimatedTime: 1800, actualTime: 0, status: TaskStatus.NOT_STARTED },
+            'task-2': { estimatedTime: 1800, actualTime: 0, status: TaskStatus.NOT_STARTED },
+          },
+        },
+      },
+    });
+
+    expect(getTodoForDate(source, '2026-05-14').estimatedTimeTodo).toBe(3600);
+  });
+
+  it('applies edited time allocation only to the active TodoFlow day plan', () => {
+    const source = ensureTodoDayPlans({
+      ...todo('todo-1', 'Shared plan'),
+      estimatedTimeTodo: 7200,
+      taskIds: ['task-1', 'task-2'],
+      tasks: {
+        'task-1': { ...task('task-1', 'First'), estimatedTime: 3600 },
+        'task-2': { ...task('task-2', 'Second'), estimatedTime: 3600 },
+      },
+      scheduleSlots: [
+        { dateKey: '2026-05-13', startTime: '09:00', endTime: '11:00' },
+        { dateKey: '2026-05-14', startTime: '14:00', endTime: '16:00' },
+      ],
+    });
+    const edited = {
+      ...getTodoForDate(source, '2026-05-14'),
+      estimatedTimeTodo: 9000,
+      actualTimeTodo: 60,
+      taskIds: ['task-1', 'task-2'],
+      tasks: {
+        ...source.tasks,
+        'task-1': { ...source.tasks['task-1'], estimatedTime: 6000, actualTime: 60, status: TaskStatus.PAUSED },
+        'task-2': { ...source.tasks['task-2'], estimatedTime: 3000, actualTime: 0, status: TaskStatus.NOT_STARTED },
+      },
+      currentTaskId: 'task-1',
+      timeLeft: 60,
+    };
+
+    const updated = applyTodoDateState(source, '2026-05-14', edited);
+
+    expect(getTodoForDate(updated, '2026-05-14')).toEqual(expect.objectContaining({
+      estimatedTimeTodo: 9000,
+      actualTimeTodo: 60,
+      currentTaskId: 'task-1',
+      timeLeft: 60,
+    }));
+    expect(getTodoForDate(updated, '2026-05-14').tasks['task-1'].estimatedTime).toBe(6000);
+    expect(getTodoForDate(updated, '2026-05-13').estimatedTimeTodo).toBe(7200);
+    expect(getTodoForDate(updated, '2026-05-13').tasks['task-1'].estimatedTime).toBe(3600);
+  });
+
+  it('builds persisted TodoFlow state from an active scoped day without replacing other day plans', () => {
+    const source = ensureTodoDayPlans({
+      ...todo('todo-1', 'Shared plan'),
+      estimatedTimeTodo: 7200,
+      taskIds: ['task-1', 'task-2'],
+      tasks: {
+        'task-1': { ...task('task-1', 'First'), estimatedTime: 3600 },
+        'task-2': { ...task('task-2', 'Second'), estimatedTime: 3600 },
+      },
+      scheduleSlots: [
+        { dateKey: '2026-05-13', startTime: '09:00', endTime: '11:00' },
+        { dateKey: '2026-05-14', startTime: '14:00', endTime: '16:00' },
+      ],
+    });
+    const scoped = {
+      ...getTodoForDate(source, '2026-05-14'),
+      status: TodoStatus.START_ON_PROGRESS,
+      actualTimeTodo: 90,
+      currentTaskId: 'task-2',
+      timeLeft: 1200,
+      tasks: {
+        ...source.tasks,
+        'task-1': { ...source.tasks['task-1'], status: TaskStatus.COMPLETED, actualTime: 3600 },
+        'task-2': { ...source.tasks['task-2'], status: TaskStatus.IN_PROGRESS, actualTime: 90 },
+      },
+      activeDateKey: '2026-05-14',
+      timer: setTimeout(() => undefined, 1),
+    };
+
+    const persisted = getPersistableTodoDateState(scoped);
+    clearTimeout(scoped.timer as NodeJS.Timeout);
+
+    expect(persisted.timer).toBeNull();
+    expect(getTodoForDate(persisted, '2026-05-14')).toEqual(expect.objectContaining({
+      status: TodoStatus.START_ON_PROGRESS,
+      actualTimeTodo: 90,
+      currentTaskId: 'task-2',
+      timeLeft: 1200,
+    }));
+    expect(getTodoForDate(persisted, '2026-05-14').tasks['task-2'].status).toBe(TaskStatus.IN_PROGRESS);
+    expect(getTodoForDate(persisted, '2026-05-13').status).toBe(TodoStatus.STOP);
+    expect(getTodoForDate(persisted, '2026-05-13').tasks['task-1'].status).toBe(TaskStatus.NOT_STARTED);
+  });
+
+  it('replaces assigned TodoFlow dates and removes schedule slots outside the new date set', () => {
+    const scheduledTodo = {
+      ...todo('todo-1', 'Plan'),
+      scheduledDate: '2026-05-13',
+      scheduledDates: ['2026-05-13', '2026-05-14'],
+      scheduleSlots: [
+        { dateKey: '2026-05-13', startTime: '09:00', endTime: '10:00' },
+        { dateKey: '2026-05-14', startTime: '11:00', endTime: '12:00' },
+      ],
+    };
+
+    const updated = setTodoAssignedDates(scheduledTodo, ['2026-05-15']);
+
+    expect(updated.scheduledDate).toBe('2026-05-15');
+    expect(updated.scheduledDates).toBeUndefined();
+    expect(updated.scheduleSlots).toBeUndefined();
+  });
+
+  it('uses existing schedule slot duration as the TodoFlow schedule target before falling back to estimates', () => {
+    const scheduledTodo = {
+      ...todo('todo-1', 'Plan'),
+      estimatedTimeTodo: 7200,
+      scheduleSlots: [
+        { dateKey: '2026-05-13', startTime: '09:00', endTime: '10:00' },
+      ],
+    };
+
+    expect(getTodoScheduleTargetDurationSeconds(scheduledTodo)).toBe(3600);
+    expect(getTodoScheduleTargetDurationSeconds({ ...scheduledTodo, scheduleSlots: undefined })).toBe(7200);
+  });
+
+  it('uses existing TodoFlow estimate when first assigning schedule time', () => {
+    const aiDraftTodo = {
+      ...todo('todo-ai', 'AI draft'),
+      estimatedTimeTodo: 9000,
+    };
+
+    expect(
+      getTodoScheduleSelectionDurationSeconds({
+        isCreateMode: false,
+        selectedDurationSeconds: 15 * 60,
+        targetScheduleDurationSeconds: aiDraftTodo.estimatedTimeTodo,
+      })
+    ).toBe(9000);
+  });
+
+  it('does not reduce TodoFlow estimate when saving an edited schedule', () => {
+    const aiDraftTodo = {
+      ...todo('todo-ai', 'AI draft'),
+      estimatedTimeTodo: 9000,
+      scheduleSlots: [{ dateKey: '2026-05-14', startTime: '09:00', endTime: '10:00' }],
+    };
+
+    expect(
+      getTodoScheduleSaveEstimateDurationSeconds({
+        todo: aiDraftTodo,
+        isCreateMode: false,
+        totalSelectedDurationSeconds: 3600,
+      })
+    ).toBe(9000);
+  });
+
+  it('does not save an edited schedule estimate below the current tasks total', () => {
+    const scheduledTodo = {
+      ...todo('todo-ai', 'AI draft'),
+      estimatedTimeTodo: 3600,
+      taskIds: ['task-1', 'task-2'],
+      tasks: {
+        'task-1': { ...task('task-1', 'First'), estimatedTime: 3600 },
+        'task-2': { ...task('task-2', 'Second'), estimatedTime: 1800 },
+      },
+      scheduleSlots: [{ dateKey: '2026-05-14', startTime: '09:00', endTime: '10:00' }],
+    };
+
+    expect(
+      getTodoScheduleSaveEstimateDurationSeconds({
+        todo: scheduledTodo,
+        isCreateMode: false,
+        totalSelectedDurationSeconds: 3600,
+      })
+    ).toBe(5400);
+  });
+
+  it('uses task total as schedule target when stored TodoFlow estimate is too short', () => {
+    const source = {
+      ...todo('todo-1', 'Plan'),
+      estimatedTimeTodo: 600,
+      taskIds: ['task-1', 'task-2'],
+      tasks: {
+        'task-1': { ...task('task-1', 'First'), estimatedTime: 1800 },
+        'task-2': { ...task('task-2', 'Second'), estimatedTime: 1800 },
+      },
+    };
+
+    expect(getTodoScheduleTargetDurationSeconds(source)).toBe(3600);
+    expect(getTodoScheduleSlotTargetDurationSeconds(source)).toBe(3600);
+  });
+
+  it('uses TodoFlow estimate as editor minimum when edited TodoFlow has no initial schedule slots', () => {
+    expect(
+      getTodoScheduleMinimumTotalDurationSeconds({
+        todo: { ...todo('todo-ai', 'AI draft'), estimatedTimeTodo: 9000 },
+        isCreateMode: false,
+        initialScheduleSlots: [],
+      })
+    ).toBe(9000);
+  });
+
+  it('uses current tasks total as editor minimum when it is longer than the TodoFlow estimate', () => {
+    expect(
+      getTodoScheduleMinimumTotalDurationSeconds({
+        todo: {
+          ...todo('todo-ai', 'AI draft'),
+          estimatedTimeTodo: 3600,
+          taskIds: ['task-1', 'task-2'],
+          tasks: {
+            'task-1': { ...task('task-1', 'First'), estimatedTime: 3600 },
+            'task-2': { ...task('task-2', 'Second'), estimatedTime: 1800 },
+          },
+        },
+        isCreateMode: false,
+        initialScheduleSlots: [],
+      })
+    ).toBe(5400);
+  });
+
+  it('uses TodoFlow estimate as per-slot resize minimum for edited TodoFlows', () => {
+    expect(
+      getTodoScheduleMinimumSlotDurationSeconds({
+        todo: {
+          ...todo('todo-ai', 'AI draft'),
+          estimatedTimeTodo: 9000,
+          scheduleSlots: [
+            { dateKey: '2026-05-14', startTime: '09:00', endTime: '11:30' },
+            { dateKey: '2026-05-15', startTime: '09:00', endTime: '11:30' },
+          ],
+        },
+        isCreateMode: false,
+        dateKey: '2026-05-14',
+        minimumStepSeconds: 900,
+      })
+    ).toBe(9000);
+  });
+
+  it('uses current tasks total as per-slot resize minimum for edited TodoFlows', () => {
+    expect(
+      getTodoScheduleMinimumSlotDurationSeconds({
+        todo: {
+          ...todo('todo-ai', 'AI draft'),
+          estimatedTimeTodo: 3600,
+          taskIds: ['task-1', 'task-2'],
+          tasks: {
+            'task-1': { ...task('task-1', 'First'), estimatedTime: 3600 },
+            'task-2': { ...task('task-2', 'Second'), estimatedTime: 1800 },
+          },
+        },
+        isCreateMode: false,
+        dateKey: '2026-05-14',
+        minimumStepSeconds: 900,
+      })
+    ).toBe(5400);
+  });
+
+  it('does not increase TodoFlow estimate from total multi-day schedule duration when saving an edited schedule', () => {
+    const multiDayTodo = {
+      ...todo('todo-ai', 'AI draft'),
+      estimatedTimeTodo: 9000,
+      scheduleSlots: [
+        { dateKey: '2026-05-14', startTime: '09:00', endTime: '11:30' },
+        { dateKey: '2026-05-15', startTime: '09:00', endTime: '11:30' },
+      ],
+    };
+
+    expect(
+      getTodoScheduleSaveEstimateDurationSeconds({
+        todo: multiDayTodo,
+        isCreateMode: false,
+        totalSelectedDurationSeconds: 18000,
+      })
+    ).toBe(9000);
+  });
+
+  it('uses the full TodoFlow estimate for each first assigned day', () => {
+    expect(
+      getTodoScheduleSelectionDurationSeconds({
+        isCreateMode: false,
+        selectedDurationSeconds: 15 * 60,
+        targetScheduleDurationSeconds: 9000,
+        unslottedSelectionCount: 2,
+      })
+    ).toBe(9000);
+  });
+
+  it('previews first schedule assignment using the TodoFlow estimate', () => {
+    expect(
+      getTodoScheduleSelectionRangeMinutes({
+        isCreateMode: false,
+        startMinutes: 9 * 60,
+        selectedEndMinutes: 9 * 60 + 15,
+        selectedDurationSeconds: 15 * 60,
+        targetScheduleDurationSeconds: 9000,
+        unslottedSelectionCount: 2,
+      })
+    ).toEqual({ start: 9 * 60, end: 11 * 60 + 30 });
+  });
+
+  it('previews multiple first assigned days using the full TodoFlow estimate', () => {
+    expect(
+      getTodoScheduleSelectionRangeMinutes({
+        isCreateMode: false,
+        startMinutes: 9 * 60,
+        selectedEndMinutes: 9 * 60 + 15,
+        selectedDurationSeconds: 15 * 60,
+        targetScheduleDurationSeconds: 9000,
+      })
+    ).toEqual({ start: 9 * 60, end: 11 * 60 + 30 });
   });
 
   it('sets a Task schedule slot and updates estimated time from duration', () => {
@@ -312,6 +942,33 @@ describe('scheduleUtils', () => {
     expect(result?.originalTodo.estimatedTimeTodo).toBe(5400);
   });
 
+  it('does not split a TodoFlow into entries shorter than their task estimates', () => {
+    const source = {
+      ...todo('todo-1', 'Shared plan'),
+      taskIds: ['task-1', 'task-2'],
+      tasks: {
+        'task-1': { ...task('task-1', 'First'), estimatedTime: 3600 },
+        'task-2': { ...task('task-2', 'Second'), estimatedTime: 1800 },
+      },
+      scheduleSlots: [
+        { dateKey: '2026-05-13', startTime: '09:00', endTime: '10:00' },
+        { dateKey: '2026-05-14', startTime: '11:00', endTime: '12:00' },
+      ],
+      scheduledDate: '2026-05-13',
+      scheduledDates: ['2026-05-13', '2026-05-14'],
+      estimatedTimeTodo: 7200,
+    };
+
+    const result = splitTodoFlowForDate(source, 'todo-2', '2026-05-13');
+
+    expect(result?.detachedTodo.estimatedTimeTodo).toBe(3600);
+    expect(result?.originalTodo.estimatedTimeTodo).toBe(3600);
+    expect(getTodoTaskEstimatedSeconds(result!.detachedTodo)).toBe(3600);
+    expect(getTodoTaskEstimatedSeconds(result!.originalTodo)).toBe(3600);
+    expect(result?.detachedTodo.tasks['task-1'].estimatedTime).toBe(2400);
+    expect(result?.detachedTodo.tasks['task-2'].estimatedTime).toBe(1200);
+  });
+
   it('can split a TodoFlow with new task ids so the detached copy is independent', () => {
     const source = {
       ...todo('todo-1', 'Shared plan'),
@@ -337,6 +994,34 @@ describe('scheduleUtils', () => {
 
   it('does not split a TodoFlow that only has one scheduled date', () => {
     expect(splitTodoFlowForDate(todo('todo-1', 'Plan', '2026-05-13'), 'todo-2', '2026-05-13')).toBeNull();
+  });
+
+  it('filters TodoFlows assignable to the selected date count and search text', () => {
+    const oneDay = {
+      ...todo('todo-1', 'One day writing', '2026-05-13'),
+      taskIds: ['task-1'],
+      tasks: { 'task-1': task('task-1', 'Draft outline') },
+    };
+    const twoDay = {
+      ...todo('todo-2', 'Release plan'),
+      scheduledDates: ['2026-05-13', '2026-05-14'],
+      taskIds: ['task-2'],
+      tasks: { 'task-2': task('task-2', 'Package installer') },
+    };
+    const otherTwoDay = {
+      ...todo('todo-3', 'Study plan'),
+      scheduledDates: ['2026-05-15', '2026-05-16'],
+      taskIds: ['task-3'],
+      tasks: { 'task-3': task('task-3', 'Read docs') },
+    };
+
+    expect(filterTodoFlowsAssignableToDateSelection([oneDay, twoDay, otherTwoDay], ['2026-06-01', '2026-06-02'], '')).toEqual([
+      twoDay,
+      otherTwoDay,
+    ]);
+    expect(filterTodoFlowsAssignableToDateSelection([oneDay, twoDay, otherTwoDay], ['2026-06-01', '2026-06-02'], 'installer')).toEqual([
+      twoDay,
+    ]);
   });
 
   it('filters manage items by search text and type/status', () => {
@@ -396,6 +1081,57 @@ describe('scheduleUtils', () => {
     expect(stats.actualSeconds).toBe(720);
   });
 
+  it('summarizes invalid TodoFlow estimates using at least the current tasks total', () => {
+    const stats = getTodoFlowAnalytics(
+      [
+        {
+          ...todo('todo-1', 'Invalid plan', '2026-05-13'),
+          estimatedTimeTodo: 1800,
+          taskIds: ['task-1', 'task-2'],
+          tasks: {
+            'task-1': { ...task('task-1', 'First'), estimatedTime: 1800 },
+            'task-2': { ...task('task-2', 'Second'), estimatedTime: 1800 },
+          },
+        },
+      ],
+      [],
+      '2026-05-13'
+    );
+
+    expect(stats.plannedSeconds).toBe(3600);
+  });
+
+  it('summarizes TodoFlow analytics from per-day plans when present', () => {
+    const scheduledTodo = ensureTodoDayPlans({
+      ...todo('todo-1', 'Plan'),
+      estimatedTimeTodo: 3600,
+      actualTimeTodo: 0,
+      taskIds: ['task-1'],
+      tasks: {
+        'task-1': task('task-1', 'First'),
+      },
+      scheduleSlots: [
+        { dateKey: '2026-05-12', startTime: '09:00', endTime: '10:00' },
+        { dateKey: '2026-05-13', startTime: '09:00', endTime: '11:00' },
+      ],
+    });
+    const updated = applyTodoDateState(scheduledTodo, '2026-05-13', {
+      ...getTodoForDate(scheduledTodo, '2026-05-13'),
+      estimatedTimeTodo: 7200,
+      actualTimeTodo: 1800,
+      taskCompleted: 1,
+    });
+
+    const stats = getTodoFlowAnalytics([updated], [], '2026-05-13');
+
+    expect(stats.scheduledDays).toBe(2);
+    expect(stats.todayTodoFlows).toBe(1);
+    expect(stats.completedTasks).toBe(1);
+    expect(stats.totalTasks).toBe(2);
+    expect(stats.plannedSeconds).toBe(10800);
+    expect(stats.actualSeconds).toBe(1800);
+  });
+
   it('creates an AI analysis prompt with TodoFlow stats and user intent', () => {
     const prompt = createAiTodoFlowAnalysisPrompt(
       [todo('todo-1', 'Deep work', '2026-05-13')],
@@ -411,6 +1147,257 @@ describe('scheduleUtils', () => {
     expect(prompt).toContain('Email');
   });
 
+  it('builds AI analysis context with fallback candidates when today has no TodoFlow', () => {
+    const sourceTodos = [
+      {
+        ...todo('todo-active', 'Paused work'),
+        status: TodoStatus.START_ON_PROGRESS,
+        currentTaskId: 'task-active',
+        taskIds: ['task-active'],
+        taskTotal: 1,
+        tasks: { 'task-active': { ...task('task-active', 'Resume implementation'), status: TaskStatus.PAUSED } },
+      },
+      todo('todo-overdue', 'Overdue work', '2026-05-19'),
+      todo('todo-upcoming', 'Upcoming work', '2026-05-22'),
+      todo('todo-far', 'Far future work', '2026-06-20'),
+      todo('todo-unscheduled', 'Backlog work'),
+    ];
+
+    const context = buildAiTodoFlowAnalysisContext(sourceTodos, [task('task-standalone', 'Standalone task')], [], {
+      todayKey: '2026-05-20',
+      mode: 'today_plan',
+    });
+
+    expect(context.situation).toBe('empty_today_with_candidates');
+    expect(context.todayTodoFlows).toHaveLength(0);
+    expect(context.activeTodoFlows.map((item) => item.id)).toEqual(['todo-active']);
+    expect(context.overdueTodoFlows.map((item) => item.id)).toEqual(['todo-overdue']);
+    expect(context.upcomingTodoFlows.map((item) => item.id)).toEqual(['todo-upcoming']);
+    expect(context.unscheduledTodoFlows.map((item) => item.id)).toEqual(['todo-active', 'todo-unscheduled']);
+    expect(context.standaloneTasks.map((item) => item.id)).toEqual(['task-standalone']);
+    expect(context.omittedCounts.upcomingTodoFlows).toBe(1);
+  });
+
+  it('detects whether AI TodoFlow has local context data', () => {
+    expect(hasAiTodoFlowContextData([], [], [])).toBe(false);
+    expect(hasAiTodoFlowContextData([todo('todo-1', 'Plan')], [], [])).toBe(true);
+    expect(hasAiTodoFlowContextData([], [task('task-1', 'Write')], [])).toBe(true);
+    expect(
+      hasAiTodoFlowContextData(
+        [],
+        [],
+        [
+          {
+            id: 'archive-1',
+            todoId: 'todo-1',
+            note: 'Past plan',
+            removedDateKeys: ['2026-05-17'],
+            archivedAt: '2026-05-18T10:00:00.000Z',
+            scheduleSlots: [],
+            totalEstimatedTime: 0,
+            totalActualTime: 0,
+            taskCompleted: 0,
+            taskTotal: 0,
+            tasks: [],
+          },
+        ]
+      )
+    ).toBe(true);
+  });
+
+  it('creates a structured AI analysis prompt from context mode and situation', () => {
+    const context = buildAiTodoFlowAnalysisContext([todo('todo-1', 'Deep work', '2026-05-20')], [], [], {
+      todayKey: '2026-05-20',
+      mode: 'workload_review',
+    });
+    const prompt = createAiTodoFlowAnalysisPrompt(context, 'Find overload risks');
+
+    expect(prompt).toContain('Return ONLY valid JSON');
+    expect(prompt).toContain('"action": "move | split | shorten | add_break | clarify | create_todoflow"');
+    expect(prompt).toContain('Analysis mode: workload_review');
+    expect(prompt).toContain('Situation: today_schedule');
+    expect(prompt).toContain('The user has TodoFlows scheduled for today.');
+    expect(prompt).toContain('Find overload risks');
+    expect(prompt).toContain('"todayTodoFlows"');
+    expect(prompt).toContain('Deep work');
+  });
+
+  it('adds the selected output language to structured AI analysis prompts', () => {
+    const context = buildAiTodoFlowAnalysisContext([todo('todo-1', 'Deep work', '2026-05-20')], [], [], {
+      todayKey: '2026-05-20',
+      mode: 'today_plan',
+    });
+
+    const prompt = createAiTodoFlowAnalysisPrompt(context, 'Analyze today', 'ja');
+
+    expect(prompt).toContain('Output language: Japanese');
+    expect(prompt).toContain('Write all user-facing string values in Japanese.');
+  });
+
+  it('parses valid AI analysis JSON and rejects markdown responses', () => {
+    const parsed = parseAiTodoFlowAnalysisResult(
+      JSON.stringify({
+        summary: 'Today has one clear priority.',
+        metrics: {
+          plannedSeconds: 3600,
+          actualSeconds: 0,
+          completionRate: 0,
+          overloadSeconds: 0,
+          riskyItemCount: 1,
+        },
+        risks: [],
+        priorities: [],
+        scheduleSuggestions: [],
+        estimationInsights: [],
+        actionPlan: ['Start the first TodoFlow.'],
+      })
+    );
+
+    expect(parsed.summary).toBe('Today has one clear priority.');
+    expect(() => parseAiTodoFlowAnalysisResult('```json\n{}\n```')).toThrow('AI response must be raw JSON');
+  });
+
+  it('rejects AI analysis metrics that are not numbers', () => {
+    expect(() =>
+      parseAiTodoFlowAnalysisResult(
+        JSON.stringify({
+          summary: 'Bad metrics',
+          metrics: {
+            plannedSeconds: '3600',
+            actualSeconds: 0,
+            completionRate: 0,
+            overloadSeconds: 0,
+            riskyItemCount: 0,
+          },
+          risks: [],
+          priorities: [],
+          scheduleSuggestions: [],
+          estimationInsights: [],
+          actionPlan: [],
+        })
+      )
+    ).toThrow('AI response does not match the TodoFlow analysis schema.');
+  });
+
+  it('creates a compact AI analysis history entry', () => {
+    const entry = createAiAnalysisHistoryEntry({
+      id: 'history-1',
+      createdAt: '2026-05-20T08:00:00.000Z',
+      provider: 'gemini',
+      model: 'gemini-2.5-flash',
+      mode: 'today_plan',
+      outputLanguage: 'vi',
+      userRequest: 'Analyze today',
+      rawResponse: '{"summary":"Good"}',
+      result: {
+        summary: 'Good',
+        metrics: {
+          plannedSeconds: 3600,
+          actualSeconds: 1200,
+          completionRate: 33,
+          overloadSeconds: 0,
+          riskyItemCount: 1,
+        },
+        risks: [],
+        priorities: [],
+        scheduleSuggestions: [],
+        estimationInsights: [],
+        actionPlan: ['Start work'],
+      },
+    });
+
+    expect(entry).toEqual({
+      id: 'history-1',
+      kind: 'analysis',
+      createdAt: '2026-05-20T08:00:00.000Z',
+      provider: 'gemini',
+      model: 'gemini-2.5-flash',
+      mode: 'today_plan',
+      outputLanguage: 'vi',
+      userRequest: 'Analyze today',
+      summary: 'Good',
+      rawResponse: '{"summary":"Good"}',
+      result: expect.objectContaining({ summary: 'Good' }),
+    });
+  });
+
+  it('creates a compact AI TodoFlow draft history entry', () => {
+    const draft = {
+      title: 'Fix provider errors',
+      suggestedDurationMinutes: 90,
+      tasks: [
+        {
+          title: 'Trace error formatter',
+          estimatedMinutes: 30,
+          subtasks: [{ title: 'Open provider module', completed: false }],
+        },
+      ],
+    };
+
+    const entry = createAiTodoFlowDraftHistoryEntry({
+      id: 'draft-history-1',
+      createdAt: '2026-05-20T09:00:00.000Z',
+      provider: 'openai',
+      model: 'gpt-5-mini',
+      outputLanguage: 'en',
+      userRequest: '  Build a focused TodoFlow  ',
+      rawResponse: '{"title":"Fix provider errors"}',
+      result: draft,
+    });
+
+    expect(entry).toEqual({
+      id: 'draft-history-1',
+      kind: 'draft',
+      createdAt: '2026-05-20T09:00:00.000Z',
+      provider: 'openai',
+      model: 'gpt-5-mini',
+      outputLanguage: 'en',
+      userRequest: 'Build a focused TodoFlow',
+      summary: 'Fix provider errors',
+      rawResponse: '{"title":"Fix provider errors"}',
+      result: draft,
+    });
+  });
+
+  it('includes archived TodoFlow summaries in the AI analysis prompt', () => {
+    const prompt = createAiTodoFlowAnalysisPrompt(
+      [],
+      [],
+      'Analyze history',
+      '2026-05-18',
+      [
+        {
+          id: 'archive-1',
+          todoId: 'todo-1',
+          note: 'Past plan',
+          removedDateKeys: ['2026-05-17'],
+          archivedAt: '2026-05-18T10:00:00.000Z',
+          scheduleSlots: [{ dateKey: '2026-05-17', startTime: '09:00', endTime: '10:00' }],
+          totalEstimatedTime: 3600,
+          totalActualTime: 4200,
+          taskCompleted: 1,
+          taskTotal: 2,
+          tasks: [
+            {
+              taskId: 'task-1',
+              title: 'Done task',
+              status: 'Completed',
+              completed: true,
+              estimatedTime: 1800,
+              actualTime: 2100,
+              timeRatio: 0.5,
+            },
+          ],
+        },
+      ]
+    );
+
+    expect(prompt).toContain('Archived TodoFlows:');
+    expect(prompt).toContain('Past plan');
+    expect(prompt).toContain('Done task');
+    expect(prompt).toContain('ratio: 50%');
+  });
+
   it('creates an AI TodoFlow creation prompt from user request and current data', () => {
     const prompt = createAiTodoFlowPrompt(
       [todo('todo-1', 'Existing plan', '2026-05-13')],
@@ -420,9 +1407,120 @@ describe('scheduleUtils', () => {
     );
 
     expect(prompt).toContain('Create a 2 hour study flow');
-    expect(prompt).toContain('Return a concise TodoFlow plan');
+    expect(prompt).toContain('Return ONLY valid JSON');
+    expect(prompt).toContain('"title": "string"');
+    expect(prompt).toContain('"tasks"');
     expect(prompt).toContain('Existing plan');
     expect(prompt).toContain('Total TodoFlows: 1');
+  });
+
+  it('includes prior AI analysis context in a TodoFlow creation prompt', () => {
+    const prompt = createAiTodoFlowPrompt(
+      [todo('todo-1', 'Existing plan', '2026-05-13')],
+      [],
+      'Improve the current flow',
+      '2026-05-13',
+      'en',
+      [
+        'Summary: Today is overloaded.',
+        'Risk: Deep work has no buffer.',
+        'Action: Split the final review.',
+      ].join('\n')
+    );
+
+    expect(prompt).toContain('Use this previous AI analysis as planning context:');
+    expect(prompt).toContain('Summary: Today is overloaded.');
+    expect(prompt).toContain('Risk: Deep work has no buffer.');
+    expect(prompt).toContain('Action: Split the final review.');
+  });
+
+  it('parses a structured AI TodoFlow draft response', () => {
+    const draft = parseAiTodoFlowDraftResult(
+      JSON.stringify({
+        title: 'Fix provider errors',
+        suggestedDurationMinutes: 90,
+        tasks: [
+          {
+            title: 'Trace provider failure',
+            estimatedMinutes: 35,
+            subtasks: ['Read logs', { title: 'Check API config', completed: true }],
+          },
+          { title: 'Review UI state', estimatedMinutes: 55 },
+        ],
+      })
+    );
+
+    expect(draft.title).toBe('Fix provider errors');
+    expect(draft.suggestedDurationMinutes).toBe(90);
+    expect(draft.tasks).toHaveLength(2);
+    expect(draft.tasks[0].subtasks).toEqual([
+      { title: 'Read logs', completed: false },
+      { title: 'Check API config', completed: true },
+    ]);
+  });
+
+  it('rejects AI TodoFlow draft task estimates that are not finite numbers', () => {
+    expect(() =>
+      parseAiTodoFlowDraftResult(
+        JSON.stringify({
+          title: 'Bad draft',
+          suggestedDurationMinutes: 60,
+          tasks: [{ title: 'Impossible estimate', estimatedMinutes: 1e309 }],
+        })
+      )
+    ).toThrow('AI draft response has invalid task estimates.');
+  });
+
+  it('rejects markdown wrapped AI TodoFlow draft responses', () => {
+    expect(() => parseAiTodoFlowDraftResult('```json\n{}\n```')).toThrow('AI draft response must be raw JSON');
+  });
+
+  it('creates a TodoFlow draft from a parsed AI draft', () => {
+    let taskCounter = 0;
+    const created = createTodoFlowFromAiDraft(
+      {
+        title: 'Fix provider errors',
+        suggestedDurationMinutes: 90,
+        tasks: [
+          { title: 'Trace provider failure', estimatedMinutes: 35, subtasks: [{ title: 'Read logs', completed: false }] },
+          { title: 'Review UI state', estimatedMinutes: 55, subtasks: [] },
+        ],
+      },
+      'todo-ai',
+      () => `task-ai-${++taskCounter}`
+    );
+
+    expect(created.note).toBe('Fix provider errors');
+    expect(created.status).toBe(TodoStatus.STOP);
+    expect(created.taskTotal).toBe(2);
+    expect(created.estimatedTimeTodo).toBe(5400);
+    expect(created.taskIds).toEqual(['task-ai-1', 'task-ai-2']);
+    expect(created.tasks['task-ai-2']).toMatchObject({
+      title: 'Review UI state',
+      estimatedTime: 3300,
+      actualTime: 0,
+      status: TaskStatus.NOT_STARTED,
+    });
+    expect(created.tasks['task-ai-1'].subTasks).toEqual([{ id: 'task-ai-1-subtask-1', title: 'Read logs', completed: false }]);
+  });
+
+  it('keeps AI suggested TodoFlow duration when it is longer than the draft task total', () => {
+    let taskCounter = 0;
+    const created = createTodoFlowFromAiDraft(
+      {
+        title: 'Plan buffer',
+        suggestedDurationMinutes: 120,
+        tasks: [
+          { title: 'Deep work', estimatedMinutes: 30, subtasks: [] },
+          { title: 'Review', estimatedMinutes: 30, subtasks: [] },
+        ],
+      },
+      'todo-ai',
+      () => `task-ai-${++taskCounter}`
+    );
+
+    expect(getTodoTaskEstimatedSeconds(created)).toBe(3600);
+    expect(created.estimatedTimeTodo).toBe(7200);
   });
 
   it('clears assignment when removing the last assigned date from a TodoFlow', () => {
@@ -560,7 +1658,7 @@ describe('scheduleUtils', () => {
     expect(tasks.reduce((total, item) => total + item.estimatedTime, 0)).toBe(3700);
   });
 
-  it('rebalances non-break task estimates to match the selected duration', () => {
+  it('preserves non-break task estimates when TodoFlow duration is longer than the current tasks total', () => {
     const synced = syncTodoTaskEstimatesWithDuration(
       {
         ...todo('todo-1', 'Plan'),
@@ -574,13 +1672,338 @@ describe('scheduleUtils', () => {
       3601
     );
 
-    expect(synced.tasks['task-1'].estimatedTime).toBe(1801);
-    expect(synced.tasks['task-2'].estimatedTime).toBe(1800);
+    expect(synced.tasks['task-1'].estimatedTime).toBe(300);
+    expect(synced.tasks['task-2'].estimatedTime).toBe(300);
     expect(synced.tasks['break-1'].estimatedTime).toBe(600);
     expect(synced.tasks['task-1'].actualTime).toBe(20);
     expect(synced.tasks['task-1'].status).toBe(TaskStatus.PAUSED);
     expect(synced.estimatedTimeTodo).toBe(3601);
     expect(synced.taskTotal).toBe(2);
+  });
+
+  it('does not reduce task estimates when syncing a TodoFlow duration shorter than the current tasks total', () => {
+    const synced = syncTodoTaskEstimatesWithDuration(
+      {
+        ...todo('todo-1', 'Plan'),
+        estimatedTimeTodo: 1800,
+        taskIds: ['task-1', 'task-2'],
+        tasks: {
+          'task-1': { ...task('task-1', 'First'), estimatedTime: 1800 },
+          'task-2': { ...task('task-2', 'Second'), estimatedTime: 1800 },
+        },
+      },
+      1800
+    );
+
+    expect(synced.tasks['task-1'].estimatedTime).toBe(1800);
+    expect(synced.tasks['task-2'].estimatedTime).toBe(1800);
+    expect(synced.estimatedTimeTodo).toBe(3600);
+    expect(synced.taskTotal).toBe(2);
+  });
+
+  it('redistributes remaining task estimates when one task estimate increases', () => {
+    const updated = redistributeTaskEstimateWithinTodo(
+      {
+        ...todo('todo-1', 'Plan'),
+        estimatedTimeTodo: 3600,
+        taskIds: ['task-1', 'task-2', 'task-3'],
+        tasks: {
+          'task-1': { ...task('task-1', 'First'), estimatedTime: 1200 },
+          'task-2': { ...task('task-2', 'Second'), estimatedTime: 1200 },
+          'task-3': { ...task('task-3', 'Third'), estimatedTime: 1200 },
+        },
+      },
+      'task-1',
+      1800
+    );
+
+    expect(updated.estimatedTimeTodo).toBe(3600);
+    expect(updated.tasks['task-1'].estimatedTime).toBe(1800);
+    expect(updated.tasks['task-2'].estimatedTime).toBe(900);
+    expect(updated.tasks['task-3'].estimatedTime).toBe(900);
+    expect(getTodoTaskEstimatedSeconds(updated)).toBe(3600);
+  });
+
+  it('normalizes invalid stored TodoFlow totals before redistributing task estimates', () => {
+    const updated = redistributeTaskEstimateWithinTodo(
+      {
+        ...todo('todo-1', 'Plan'),
+        estimatedTimeTodo: 600,
+        taskIds: ['task-1', 'task-2'],
+        tasks: {
+          'task-1': { ...task('task-1', 'First'), estimatedTime: 1800 },
+          'task-2': { ...task('task-2', 'Second'), estimatedTime: 1800 },
+        },
+      },
+      'task-1',
+      2400
+    );
+
+    expect(updated.estimatedTimeTodo).toBe(3600);
+    expect(getTodoTaskEstimatedSeconds(updated)).toBe(3600);
+  });
+
+  it('adds a task using the lowest current task estimate and preserves the TodoFlow total', () => {
+    const source = {
+      ...todo('todo-1', 'Plan'),
+      estimatedTimeTodo: 600,
+      taskIds: ['task-1', 'task-2', 'task-3'],
+      tasks: {
+        'task-1': { ...task('task-1', 'First'), estimatedTime: 300 },
+        'task-2': { ...task('task-2', 'Second'), estimatedTime: 200 },
+        'task-3': { ...task('task-3', 'Third'), estimatedTime: 100 },
+      },
+    };
+
+    const updated = addTaskWithProportionalEstimate(source, {
+      ...task('task-4', 'Fourth'),
+      estimatedTime: 0,
+    });
+
+    expect(updated.taskIds).toEqual(['task-1', 'task-2', 'task-3', 'task-4']);
+    expect(updated.tasks['task-4'].estimatedTime).toBe(100);
+    expect(updated.tasks['task-1'].estimatedTime).toBe(250);
+    expect(updated.tasks['task-2'].estimatedTime).toBe(167);
+    expect(updated.tasks['task-3'].estimatedTime).toBe(83);
+    expect(updated.estimatedTimeTodo).toBe(600);
+    expect(getTodoTaskEstimatedSeconds(updated)).toBe(600);
+  });
+
+  it('normalizes invalid stored TodoFlow totals before adding a task', () => {
+    const source = {
+      ...todo('todo-1', 'Plan'),
+      estimatedTimeTodo: 600,
+      taskIds: ['task-1', 'task-2'],
+      tasks: {
+        'task-1': { ...task('task-1', 'First'), estimatedTime: 1800 },
+        'task-2': { ...task('task-2', 'Second'), estimatedTime: 1800 },
+      },
+    };
+
+    const updated = addTaskWithProportionalEstimate(source, {
+      ...task('task-3', 'Third'),
+      estimatedTime: 0,
+    });
+
+    expect(updated.estimatedTimeTodo).toBe(3600);
+    expect(getTodoTaskEstimatedSeconds(updated)).toBe(3600);
+  });
+
+  it('keeps zero-estimate TodoFlows stable when adding the first task', () => {
+    const updated = addTaskWithProportionalEstimate(
+      { ...todo('todo-1', 'Plan'), estimatedTimeTodo: 0 },
+      { ...task('task-1', 'First'), estimatedTime: 0 }
+    );
+
+    expect(updated.taskIds).toEqual(['task-1']);
+    expect(updated.tasks['task-1'].estimatedTime).toBe(0);
+    expect(updated.estimatedTimeTodo).toBe(0);
+    expect(updated.taskTotal).toBe(1);
+  });
+
+  it('redistributes remaining task estimates when one task estimate decreases', () => {
+    const updated = redistributeTaskEstimateWithinTodo(
+      {
+        ...todo('todo-1', 'Plan'),
+        estimatedTimeTodo: 3600,
+        taskIds: ['task-1', 'task-2', 'task-3'],
+        tasks: {
+          'task-1': { ...task('task-1', 'First'), estimatedTime: 1800 },
+          'task-2': { ...task('task-2', 'Second'), estimatedTime: 900 },
+          'task-3': { ...task('task-3', 'Third'), estimatedTime: 900 },
+        },
+      },
+      'task-1',
+      1200
+    );
+
+    expect(updated.estimatedTimeTodo).toBe(3600);
+    expect(updated.tasks['task-1'].estimatedTime).toBe(1200);
+    expect(updated.tasks['task-2'].estimatedTime).toBe(1200);
+    expect(updated.tasks['task-3'].estimatedTime).toBe(1200);
+    expect(getTodoTaskEstimatedSeconds(updated)).toBe(3600);
+  });
+
+  it('ignores break tasks when redistributing task estimates', () => {
+    const updated = redistributeTaskEstimateWithinTodo(
+      {
+        ...todo('todo-1', 'Plan'),
+        estimatedTimeTodo: 3600,
+        taskIds: ['task-1', 'break-1', 'task-2'],
+        tasks: {
+          'task-1': { ...task('task-1', 'First'), estimatedTime: 1200 },
+          'break-1': { ...task('break-1', 'Break'), estimatedTime: 300, isTaskBreak: true },
+          'task-2': { ...task('task-2', 'Second'), estimatedTime: 2400 },
+        },
+      },
+      'task-1',
+      1800
+    );
+
+    expect(updated.tasks['task-1'].estimatedTime).toBe(1800);
+    expect(updated.tasks['task-2'].estimatedTime).toBe(1800);
+    expect(updated.tasks['break-1'].estimatedTime).toBe(300);
+    expect(getTodoTaskEstimatedSeconds(updated)).toBe(3600);
+  });
+
+  it('resizes the boundary between adjacent tasks while preserving the total estimate', () => {
+    const updated = resizeTaskAllocationBoundary(
+      {
+        ...todo('todo-1', 'Plan'),
+        estimatedTimeTodo: 3600,
+        taskIds: ['task-1', 'task-2', 'task-3'],
+        tasks: {
+          'task-1': { ...task('task-1', 'First'), estimatedTime: 1200 },
+          'task-2': { ...task('task-2', 'Second'), estimatedTime: 1200 },
+          'task-3': { ...task('task-3', 'Third'), estimatedTime: 1200 },
+        },
+      },
+      'task-1',
+      'task-2',
+      300
+    );
+
+    expect(updated.tasks['task-1'].estimatedTime).toBe(1500);
+    expect(updated.tasks['task-2'].estimatedTime).toBe(900);
+    expect(updated.tasks['task-3'].estimatedTime).toBe(1200);
+    expect(getTodoTaskEstimatedSeconds(updated)).toBe(3600);
+  });
+
+  it('prevents boundary resizing from creating negative task estimates', () => {
+    const updated = resizeTaskAllocationBoundary(
+      {
+        ...todo('todo-1', 'Plan'),
+        estimatedTimeTodo: 1800,
+        taskIds: ['task-1', 'task-2'],
+        tasks: {
+          'task-1': { ...task('task-1', 'First'), estimatedTime: 600 },
+          'task-2': { ...task('task-2', 'Second'), estimatedTime: 1200 },
+        },
+      },
+      'task-1',
+      'task-2',
+      1800
+    );
+
+    expect(updated.tasks['task-1'].estimatedTime).toBe(1800);
+    expect(updated.tasks['task-2'].estimatedTime).toBe(0);
+    expect(getTodoTaskEstimatedSeconds(updated)).toBe(1800);
+  });
+
+  it('calculates repeated boundary drag moves from the original snapshot instead of compounding deltas', () => {
+    const source = {
+      ...todo('todo-1', 'Plan'),
+      estimatedTimeTodo: 2000,
+      taskIds: ['task-1', 'task-2'],
+      tasks: {
+        'task-1': { ...task('task-1', 'First'), estimatedTime: 1000 },
+        'task-2': { ...task('task-2', 'Second'), estimatedTime: 1000 },
+      },
+    };
+
+    const firstMove = resizeTaskAllocationBoundaryFromDrag(source, 'task-1', 'task-2', {
+      startY: 100,
+      currentY: 150,
+      totalSeconds: 2000,
+      laneHeight: 200,
+    });
+    const repeatedMove = resizeTaskAllocationBoundaryFromDrag(source, 'task-1', 'task-2', {
+      startY: 100,
+      currentY: 150,
+      totalSeconds: 2000,
+      laneHeight: 200,
+    });
+
+    expect(firstMove.tasks['task-1'].estimatedTime).toBe(1500);
+    expect(firstMove.tasks['task-2'].estimatedTime).toBe(500);
+    expect(repeatedMove.tasks['task-1'].estimatedTime).toBe(1500);
+    expect(repeatedMove.tasks['task-2'].estimatedTime).toBe(500);
+  });
+
+  it('reorders TodoFlow task ids without changing task estimates', () => {
+    const updated = reorderTodoTaskIds(
+      {
+        ...todo('todo-1', 'Plan'),
+        taskIds: ['task-1', 'task-2', 'task-3'],
+        tasks: {
+          'task-1': { ...task('task-1', 'First'), estimatedTime: 600 },
+          'task-2': { ...task('task-2', 'Second'), estimatedTime: 1200 },
+          'task-3': { ...task('task-3', 'Third'), estimatedTime: 1800 },
+        },
+      },
+      2,
+      0
+    );
+
+    expect(updated.taskIds).toEqual(['task-3', 'task-1', 'task-2']);
+    expect(updated.tasks['task-1'].estimatedTime).toBe(600);
+    expect(updated.tasks['task-2'].estimatedTime).toBe(1200);
+    expect(updated.tasks['task-3'].estimatedTime).toBe(1800);
+  });
+
+  it('extends a TodoFlow schedule duration without overlapping another TodoFlow that day', () => {
+    const resized = resizeTodoFlowScheduleDuration(
+      {
+        ...todo('todo-1', 'Plan'),
+        scheduleSlots: [{ dateKey: '2026-05-12', startTime: '09:00', endTime: '10:00' }],
+      },
+      5400,
+      [
+        {
+          ...todo('todo-2', 'Other'),
+          scheduleSlots: [{ dateKey: '2026-05-12', startTime: '11:00', endTime: '12:00' }],
+        },
+      ]
+    );
+
+    expect(resized).toEqual({
+      ok: true,
+      todo: expect.objectContaining({
+        estimatedTimeTodo: 5400,
+        scheduleSlots: [{ dateKey: '2026-05-12', startTime: '09:00', endTime: '10:30' }],
+      }),
+    });
+  });
+
+  it('rejects resizing a TodoFlow schedule below the current tasks total', () => {
+    const resized = resizeTodoFlowScheduleDuration(
+      {
+        ...todo('todo-1', 'Plan'),
+        taskIds: ['task-1', 'task-2'],
+        tasks: {
+          'task-1': { ...task('task-1', 'First'), estimatedTime: 3600 },
+          'task-2': { ...task('task-2', 'Second'), estimatedTime: 1800 },
+        },
+        scheduleSlots: [{ dateKey: '2026-05-12', startTime: '09:00', endTime: '10:00' }],
+      },
+      3600
+    );
+
+    expect(resized).toEqual({
+      ok: false,
+      reason: 'TodoFlow total time cannot be shorter than the current tasks total',
+    });
+  });
+
+  it('rejects extending a TodoFlow schedule duration when it would overlap another TodoFlow that day', () => {
+    const resized = resizeTodoFlowScheduleDuration(
+      {
+        ...todo('todo-1', 'Plan'),
+        scheduleSlots: [{ dateKey: '2026-05-12', startTime: '09:00', endTime: '10:00' }],
+      },
+      9000,
+      [
+        {
+          ...todo('todo-2', 'Other'),
+          scheduleSlots: [{ dateKey: '2026-05-12', startTime: '11:00', endTime: '12:00' }],
+        },
+      ]
+    );
+
+    expect(resized).toEqual({
+      ok: false,
+      reason: 'This total time overlaps with another TodoFlow',
+    });
   });
 
   it('detects overlapping schedule slots on the same date', () => {
@@ -638,6 +2061,44 @@ describe('scheduleUtils', () => {
         },
       })
     ).toBe(true);
+  });
+
+  it('allows resuming an active TodoFlow entry from paused or in-progress task state', () => {
+    expect(
+      canResumeTodoFlowEntry({
+        ...todo('todo-1', 'Plan'),
+        currentTaskId: 'task-1',
+        taskIds: ['task-1'],
+        tasks: {
+          'task-1': { ...task('task-1', 'First'), status: TaskStatus.PAUSED },
+        },
+      })
+    ).toBe(true);
+
+    expect(
+      canResumeTodoFlowEntry({
+        ...todo('todo-1', 'Plan'),
+        currentTaskId: 'task-1',
+        taskIds: ['task-1'],
+        tasks: {
+          'task-1': { ...task('task-1', 'First'), status: TaskStatus.IN_PROGRESS },
+        },
+      })
+    ).toBe(true);
+  });
+
+  it('does not resume an entry with no current task or a completed current task', () => {
+    expect(canResumeTodoFlowEntry(todo('todo-1', 'Plan'))).toBe(false);
+    expect(
+      canResumeTodoFlowEntry({
+        ...todo('todo-1', 'Plan'),
+        currentTaskId: 'task-1',
+        taskIds: ['task-1'],
+        tasks: {
+          'task-1': { ...task('task-1', 'First'), status: TaskStatus.COMPLETED },
+        },
+      })
+    ).toBe(false);
   });
 
   it('resets TodoFlow progress and removes runtime break tasks', () => {
@@ -717,6 +2178,20 @@ describe('scheduleUtils', () => {
         },
       })
     ).toBe(720);
+  });
+
+  it('normalizes TodoFlow estimated duration to at least the current tasks total', () => {
+    expect(
+      getTodoEstimatedSeconds({
+        ...todo('todo-1', 'Plan'),
+        estimatedTimeTodo: 300,
+        taskIds: ['task-1', 'task-2'],
+        tasks: {
+          'task-1': { ...task('task-1', 'First'), estimatedTime: 300 },
+          'task-2': { ...task('task-2', 'Second'), estimatedTime: 600 },
+        },
+      })
+    ).toBe(900);
   });
 
   it('moves a schedule slot to a new start time without changing duration', () => {

@@ -172,6 +172,8 @@ const createScheduleEditorWindow = (payload: any = {}) => {
   }
   if (payload.todoId) params.set('todoId', payload.todoId);
   if (payload.taskId) params.set('taskId', payload.taskId);
+  if (payload.returnTo) params.set('returnTo', payload.returnTo);
+  if (payload.activeDateKey) params.set('activeDateKey', payload.activeDateKey);
 
   const win = new BrowserWindow({
     ...defaultWindowConfig,
@@ -190,6 +192,70 @@ const createScheduleEditorWindow = (payload: any = {}) => {
   });
 
   const route = `/schedule-editor?${params.toString()}`;
+  if (isDev()) {
+    win.loadURL(`http://localhost:5123/#${route}`);
+  } else {
+    win.loadFile(getUIPath(), { hash: route });
+  }
+
+  windows.set(windowType, { window: win, type: windowType });
+  let hasShown = false;
+  const showEditor = () => {
+    if (hasShown || win.isDestroyed()) return;
+    hasShown = true;
+    win.show();
+    win.focus();
+  };
+
+  win.once('ready-to-show', showEditor);
+  win.webContents.once('did-finish-load', showEditor);
+  setTimeout(showEditor, 1500);
+
+  if (isDev()) {
+    win.webContents.openDevTools();
+  }
+
+  return new Promise((resolve) => {
+    win.on('closed', () => {
+      windows.delete(windowType);
+      resolve({ id: windowType, type: windowType, closed: true });
+    });
+  });
+};
+
+const createTodoTimeEditorWindow = (payload: any = {}) => {
+  const parentData = windows.get('main');
+  const parentWindow = parentData?.window;
+  const windowType = 'todo-time-editor';
+  const existing = windows.get(windowType);
+
+  if (existing && !existing.window.isDestroyed()) {
+    existing.window.focus();
+    return Promise.resolve({ id: windowType, type: windowType, reused: true });
+  }
+
+  const params = new URLSearchParams();
+  if (payload.todoId) params.set('todoId', payload.todoId);
+  if (payload.returnTo) params.set('returnTo', payload.returnTo);
+  if (payload.activeDateKey) params.set('activeDateKey', payload.activeDateKey);
+
+  const win = new BrowserWindow({
+    ...defaultWindowConfig,
+    parent: parentWindow,
+    modal: Boolean(parentWindow),
+    width: 1100,
+    height: 750,
+    minWidth: 720,
+    minHeight: 580,
+    show: false,
+    icon: getIconPath("trayIcon.png"),
+    webPreferences: {
+      ...defaultWindowConfig.webPreferences,
+      preload: getPreloadPath(),
+    },
+  });
+
+  const route = `/todoflow-time-editor?${params.toString()}`;
   if (isDev()) {
     win.loadURL(`http://localhost:5123/#${route}`);
   } else {
@@ -275,6 +341,7 @@ export{
   windowConfigs,
   createWindow,
   createScheduleEditorWindow,
+  createTodoTimeEditorWindow,
   closeWindow,
   closeWindowsByType,
   closeAllExceptMain,

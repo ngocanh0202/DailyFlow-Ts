@@ -1,0 +1,201 @@
+import { describe, expect, it } from 'vitest';
+import todoReducer, {
+  insertNewTaskRelativeToTask,
+  moveTaskById,
+  removeTask,
+  setChangeCurrentTask,
+  setStartTimer,
+  setStopTimer,
+  setTimeLeft,
+  setTodoStatus,
+} from './todoSlice';
+import { TaskStatus } from '~/enums/TaskStatus.Type.enum';
+import { TodoStatus } from '~/enums/TodoStatus.Type.enum';
+
+const buildRunningTodo = (): TodoFlow => ({
+  id: 'todo-1',
+  note: 'Todo',
+  status: TodoStatus.START_ON_TODO,
+  taskCompleted: 0,
+  taskTotal: 1,
+  estimatedTimeTodo: 60,
+  actualTimeTodo: 7,
+  taskIds: ['task-1'],
+  tasks: {
+    'task-1': {
+      id: 'task-1',
+      title: 'Task',
+      estimatedTime: 60,
+      actualTime: 7,
+      subTasks: [],
+      status: TaskStatus.IN_PROGRESS,
+    },
+  },
+  currentTaskId: 'task-1',
+  timeLeft: 7,
+  timer: null,
+});
+
+const buildTodoWithMixedTasks = (): TodoFlow => ({
+  ...buildRunningTodo(),
+  taskTotal: 3,
+  taskCompleted: 1,
+  taskIds: ['done-task', 'task-1', 'task-2'],
+  tasks: {
+    'done-task': {
+      id: 'done-task',
+      title: 'Done task',
+      estimatedTime: 30,
+      actualTime: 30,
+      subTasks: [],
+      status: TaskStatus.COMPLETED,
+    },
+    'task-1': {
+      id: 'task-1',
+      title: 'Task 1',
+      estimatedTime: 60,
+      actualTime: 7,
+      subTasks: [],
+      status: TaskStatus.NOT_STARTED,
+    },
+    'task-2': {
+      id: 'task-2',
+      title: 'Task 2',
+      estimatedTime: 90,
+      actualTime: 0,
+      subTasks: [],
+      status: TaskStatus.NOT_STARTED,
+    },
+  },
+  currentTaskId: undefined,
+  timeLeft: 0,
+});
+
+describe('todoSlice timer ticks', () => {
+  it('ignores automatic timer ticks when no timer is active', () => {
+    const previous = buildRunningTodo();
+
+    const next = todoReducer(previous, setTimeLeft(undefined));
+
+    expect(next.timeLeft).toBe(7);
+    expect(next.actualTimeTodo).toBe(7);
+    expect(next.tasks['task-1'].actualTime).toBe(7);
+  });
+
+  it('still applies explicit time updates when no timer is active', () => {
+    const previous = buildRunningTodo();
+
+    const next = todoReducer(previous, setTimeLeft(12));
+
+    expect(next.timeLeft).toBe(12);
+    expect(next.tasks['task-1'].actualTime).toBe(12);
+  });
+
+  it('applies automatic timer ticks after starting with timer id zero', () => {
+    const started = todoReducer(buildRunningTodo(), setStartTimer(0 as unknown as NodeJS.Timeout));
+
+    const next = todoReducer(started, setTimeLeft(undefined));
+
+    expect(next.timeLeft).toBe(8);
+    expect(next.actualTimeTodo).toBe(8);
+    expect(next.tasks['task-1'].actualTime).toBe(8);
+  });
+
+  it('preserves TodoFlow buffer time when starting a timer recalculates task counts', () => {
+    const previous = {
+      ...buildRunningTodo(),
+      estimatedTimeTodo: 120,
+      tasks: {
+        ...buildRunningTodo().tasks,
+        'task-1': {
+          ...buildRunningTodo().tasks['task-1'],
+          estimatedTime: 60,
+        },
+      },
+    };
+
+    const next = todoReducer(previous, setStartTimer(0 as unknown as NodeJS.Timeout));
+
+    expect(next.estimatedTimeTodo).toBe(120);
+  });
+
+  it('raises TodoFlow estimated time when task estimates exceed the previous total', () => {
+    const previous = {
+      ...buildRunningTodo(),
+      estimatedTimeTodo: 120,
+      tasks: {
+        ...buildRunningTodo().tasks,
+        'task-1': {
+          ...buildRunningTodo().tasks['task-1'],
+          estimatedTime: 180,
+        },
+      },
+    };
+
+    const next = todoReducer(previous, setStartTimer(0 as unknown as NodeJS.Timeout));
+
+    expect(next.estimatedTimeTodo).toBe(180);
+  });
+
+  it('stops a running timer when the active timer id is zero', () => {
+    const started = todoReducer(buildRunningTodo(), setStartTimer(0 as unknown as NodeJS.Timeout));
+
+    const next = todoReducer(started, setStopTimer());
+
+    expect(next.timer).toBeNull();
+    expect(next.tasks['task-1'].status).toBe(TaskStatus.PAUSED);
+  });
+
+  it('selects the first unfinished task when starting progress without a current task', () => {
+    const next = todoReducer(buildTodoWithMixedTasks(), setTodoStatus(TodoStatus.START_ON_PROGRESS));
+
+    expect(next.currentTaskId).toBe('task-1');
+    expect(next.timeLeft).toBe(7);
+    expect(next.tasks['done-task'].status).toBe(TaskStatus.COMPLETED);
+  });
+
+  it('switches only between unfinished tasks without reselecting completed tasks', () => {
+    const started = {
+      ...buildTodoWithMixedTasks(),
+      currentTaskId: 'task-1',
+      timeLeft: 7,
+    };
+
+    const next = todoReducer(started, setChangeCurrentTask({ isNext: true, status: TaskStatus.PAUSED }));
+
+    expect(next.currentTaskId).toBe('task-2');
+    expect(next.tasks['done-task'].status).toBe(TaskStatus.COMPLETED);
+    expect(next.tasks['task-1'].status).toBe(TaskStatus.PAUSED);
+  });
+
+  it('inserts a new task above the target task id even when completed tasks are hidden in the UI', () => {
+    const previous = {
+      ...buildTodoWithMixedTasks(),
+      estimatedTimeTodo: 180,
+    };
+
+    const next = todoReducer(previous, insertNewTaskRelativeToTask({ taskId: 'task-2', position: 'above' }));
+    const newTaskId = next.taskIds.find((taskId) => !previous.taskIds.includes(taskId));
+
+    expect(newTaskId).toBeTruthy();
+    expect(next.taskIds).toEqual(['done-task', 'task-1', newTaskId, 'task-2']);
+    expect(next.estimatedTimeTodo).toBe(180);
+  });
+
+  it('moves a task by id without relying on the visible list index', () => {
+    const previous = buildTodoWithMixedTasks();
+
+    const next = todoReducer(previous, moveTaskById({ taskId: 'task-2', direction: 'up' }));
+
+    expect(next.taskIds).toEqual(['done-task', 'task-2', 'task-1']);
+  });
+
+  it('clears the current task when removing that task', () => {
+    const next = todoReducer(buildRunningTodo(), removeTask('task-1'));
+
+    expect(next.currentTaskId).toBeUndefined();
+    expect(next.timeLeft).toBe(0);
+    expect(next.taskIds).toEqual([]);
+    expect(next.taskTotal).toBe(0);
+  });
+});

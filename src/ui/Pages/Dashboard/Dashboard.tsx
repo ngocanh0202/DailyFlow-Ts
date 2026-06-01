@@ -1,16 +1,20 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import './Dashboard.css';
 import { PageType } from '~/enums/PageType.enum';
-import { useAppDispatch } from '~/ui/store/hooks';
-import { setTodo } from '~/ui/store/todo/todoSlice';
+import { useAppDispatch, useAppSelector } from '~/ui/store/hooks';
+import { setStopTimer, setTodo } from '~/ui/store/todo/todoSlice';
 import { useNavigate } from 'react-router-dom';
 import { useResizePage } from '~/ui/helpers/hooks/useResizePage';
 import {
-  buildMonthDays,
+  buildCalendarWindowDays,
   formatDateChipLabels,
+  filterTodoFlowsAssignableToDateSelection,
   getDueNotificationItems,
   getDueSlotNotificationItems,
+  getTodoForDate,
+  getMonthCalendarGridStart,
   getTodoFlowLaunchLabel,
+  getTodoScheduleDateKeys,
   groupScheduledItemsByDate,
   groupScheduledItemsForDateRange,
   type DueSlotNotificationItem,
@@ -21,44 +25,87 @@ import {
   toDateKey,
 } from '~/ui/helpers/utils/scheduleUtils';
 import DateChipList from '~/ui/components/DateChipList/DateChipList';
+import { useAlert } from '~/ui/helpers/hooks/useAlert';
 
 const withoutRuntimeTimer = (todo: TodoFlow): TodoFlow => ({ ...todo, timer: null });
 const AUTO_SCROLL_EDGE = 48;
 const AUTO_SCROLL_STEP = 18;
+const MONTH_SWITCH_EDGE = 28;
+const MONTH_SWITCH_COOLDOWN_MS = 150;
 
 const isDueSlotNotification = (item: unknown): item is DueSlotNotificationItem => {
   return Boolean(item && typeof item === 'object' && 'slot' in item && 'notificationKey' in item);
 };
 
+const startOfWeek = (date: Date): Date => {
+  const start = new Date(date);
+  start.setDate(start.getDate() - start.getDay());
+  return start;
+};
+
+const dateKeyToDate = (dateKey: string): Date => {
+  const [year, month, day] = dateKey.split('-').map(Number);
+  return new Date(year, month - 1, day);
+};
+
+const getDominantMonthDate = (days: ReturnType<typeof buildCalendarWindowDays>): Date => {
+  const counts = days.reduce<Record<string, { date: Date; count: number }>>((monthCounts, day) => {
+    const key = `${day.date.getFullYear()}-${day.date.getMonth()}`;
+    monthCounts[key] ||= { date: new Date(day.date.getFullYear(), day.date.getMonth(), 1), count: 0 };
+    monthCounts[key].count += 1;
+    return monthCounts;
+  }, {});
+
+  return Object.values(counts).sort((a, b) => b.count - a.count || a.date.getTime() - b.date.getTime())[0]?.date || new Date();
+};
+
 const Dashboard = () => {
   const dispatch = useAppDispatch();
+  const activeTodoFlow = useAppSelector((state) => state.todoflow);
   const navigate = useNavigate();
+  const { notify } = useAlert();
   const dayMenuRef = useRef<HTMLDivElement | null>(null);
   const calendarLayoutRef = useRef<HTMLDivElement | null>(null);
+  const calendarMainRef = useRef<HTMLElement | null>(null);
+  const datePickerRef = useRef<HTMLInputElement | null>(null);
+  const lastDragMonthSwitchRef = useRef(0);
   const [todos, setTodos] = useState<TodoFlow[]>([]);
-  const [visibleMonth, setVisibleMonth] = useState(() => new Date());
+  const [visibleStartDate, setVisibleStartDate] = useState(() => getMonthCalendarGridStart(new Date()));
   const [selectedDateKey, setSelectedDateKey] = useState(() => toDateKey(new Date()));
   const [selectedDateKeys, setSelectedDateKeys] = useState<string[]>(() => [toDateKey(new Date())]);
   const [rangeStartDateKey, setRangeStartDateKey] = useState(() => toDateKey(new Date()));
   const [isSelectingDates, setIsSelectingDates] = useState(false);
   const [dayMenu, setDayMenu] = useState<{ dateKey: string; top: number; left: number } | null>(null);
+  const [dayMenuSearch, setDayMenuSearch] = useState('');
+  const [isLoadingSchedule, setIsLoadingSchedule] = useState(true);
+  const [scheduleLoadError, setScheduleLoadError] = useState<string | null>(null);
 
   useResizePage(PageType.MAIN);
 
-  const fetchScheduleData = async () => {
+  const fetchScheduleData = async (showLoading = false) => {
     try {
+      if (showLoading) {
+        setIsLoadingSchedule(true);
+      }
+      setScheduleLoadError(null);
       const allTodos: TodoFlow[] = await window.electronAPI.todoGetAll();
       setTodos(allTodos.map(withoutRuntimeTimer));
     } catch (err) {
       console.error('Failed to fetch schedule data:', err);
+      setScheduleLoadError('Failed to load dashboard data.');
+    } finally {
+      if (showLoading) {
+        setIsLoadingSchedule(false);
+      }
     }
   };
 
   useEffect(() => {
-    fetchScheduleData();
+    fetchScheduleData(true);
   }, []);
 
-  const monthDays = useMemo(() => buildMonthDays(visibleMonth), [visibleMonth]);
+  const monthDays = useMemo(() => buildCalendarWindowDays(visibleStartDate), [visibleStartDate]);
+  const dominantMonthDate = useMemo(() => getDominantMonthDate(monthDays), [monthDays]);
   const groupedItems = useMemo(
     () => groupScheduledItemsByDate(todos, []),
     [todos]
@@ -66,6 +113,10 @@ const Dashboard = () => {
   const selectedRangeItems = useMemo(
     () => groupScheduledItemsForDateRange(todos, [], selectedDateKeys),
     [todos, selectedDateKeys]
+  );
+  const assignableTodos = useMemo(
+    () => filterTodoFlowsAssignableToDateSelection(todos, selectedDateKeys, dayMenuSearch),
+    [dayMenuSearch, selectedDateKeys, todos]
   );
 
   const openScheduleEditor = async (payload: { todoId?: string; dateKeys?: string[] } = {}) => {
@@ -82,10 +133,14 @@ const Dashboard = () => {
     });
     await fetchScheduleData();
     setDayMenu(null);
+    setDayMenuSearch('');
   };
 
   const openTodo = (todo: TodoFlow, dateKey?: string) => {
-    dispatch(setTodo(withoutRuntimeTimer(todo)));
+    if (activeTodoFlow.timer != null) {
+      dispatch(setStopTimer());
+    }
+    dispatch(setTodo(withoutRuntimeTimer(dateKey ? getTodoForDate(todo, dateKey) : todo)));
     navigate('/todoflow', { state: { fromDashboard: true, dateKey } });
   };
 
@@ -112,6 +167,7 @@ const Dashboard = () => {
 
     const scrollCalendarNearEdge = (event: MouseEvent) => {
       const container = calendarLayoutRef.current;
+      const calendarMain = calendarMainRef.current;
       if (!container) return;
 
       const rect = container.getBoundingClientRect();
@@ -124,11 +180,24 @@ const Dashboard = () => {
       if (left || top) {
         container.scrollBy({ left, top });
       }
+
+      if (!calendarMain) return;
+      const calendarRect = calendarMain.getBoundingClientRect();
+      const now = Date.now();
+      if (now - lastDragMonthSwitchRef.current < MONTH_SWITCH_COOLDOWN_MS) return;
+
+      if (event.clientY > calendarRect.bottom - MONTH_SWITCH_EDGE) {
+        lastDragMonthSwitchRef.current = now;
+        moveVisibleRowsWithSelection(1);
+      } else if (event.clientY < calendarRect.top + MONTH_SWITCH_EDGE) {
+        lastDragMonthSwitchRef.current = now;
+        moveVisibleRowsWithSelection(-1);
+      }
     };
 
     document.addEventListener('mousemove', scrollCalendarNearEdge);
     return () => document.removeEventListener('mousemove', scrollCalendarNearEdge);
-  }, [isSelectingDates]);
+  }, [isSelectingDates, rangeStartDateKey]);
 
   useEffect(() => {
     const notifyDueItems = async () => {
@@ -141,10 +210,10 @@ const Dashboard = () => {
         : getDueNotificationItems(unslottedTodos, [], todayKey);
 
       for (const due of dueItems) {
-        await window.electronAPI.systemNotification({
-          title: 'TodoFlow starts soon',
-          body: isDueSlotNotification(due) ? `${due.title} starts at ${due.slot.startTime}` : due.title,
-        });
+        await notify(
+          'TodoFlow starts soon',
+          isDueSlotNotification(due) ? `${due.title} starts at ${due.slot.startTime}` : due.title
+        );
 
         if (due.type === 'todo') {
           const updated = withoutRuntimeTimer({ ...due.item, lastNotifiedDate: isDueSlotNotification(due) ? due.notificationKey : todayKey });
@@ -161,8 +230,65 @@ const Dashboard = () => {
     }
   }, [todos.length]);
 
-  const moveVisibleMonth = (offset: number) => {
-    setVisibleMonth((current) => new Date(current.getFullYear(), current.getMonth() + offset, 1));
+  const moveVisibleRows = (offset: number) => {
+    setVisibleStartDate((current) => {
+      const next = new Date(current);
+      next.setDate(next.getDate() + offset * 7);
+      return startOfWeek(next);
+    });
+  };
+
+  useEffect(() => {
+    const calendarLayout = calendarLayoutRef.current;
+    if (!calendarLayout) return;
+
+    const handleCalendarWheel = (event: WheelEvent) => {
+      if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
+
+      event.preventDefault();
+      moveVisibleRows(event.deltaY > 0 ? 1 : -1);
+    };
+
+    calendarLayout.addEventListener('wheel', handleCalendarWheel, { passive: false });
+    return () => calendarLayout.removeEventListener('wheel', handleCalendarWheel);
+  }, [isLoadingSchedule, scheduleLoadError]);
+
+  const moveVisibleRowsWithSelection = (offset: number) => {
+    setVisibleStartDate((current) => {
+      const nextStart = new Date(current);
+      nextStart.setDate(nextStart.getDate() + offset * 7);
+      const nextDateKey = toDateKey(nextStart);
+      if (!isPastDateKey(nextDateKey)) {
+        setSelectedDateKey(nextDateKey);
+        setSelectedDateKeys((currentSelection) => {
+          const nextRange = listDateKeysBetween(rangeStartDateKey, nextDateKey).filter((key) => !isPastDateKey(key));
+          return nextRange.length > 0 ? nextRange : currentSelection;
+        });
+      }
+      return startOfWeek(nextStart);
+    });
+  };
+
+  const focusToday = () => {
+    const today = new Date();
+    const todayKey = toDateKey(today);
+    setVisibleStartDate(getMonthCalendarGridStart(today));
+    setSelectedDateKey(todayKey);
+    setSelectedDateKeys([todayKey]);
+    setRangeStartDateKey(todayKey);
+    setDayMenu(null);
+  };
+
+  const selectDateFromPicker = (dateKey: string) => {
+    if (!dateKey || isPastDateKey(dateKey)) {
+      return;
+    }
+
+    setVisibleStartDate(getMonthCalendarGridStart(dateKeyToDate(dateKey)));
+    setSelectedDateKey(dateKey);
+    setSelectedDateKeys([dateKey]);
+    setRangeStartDateKey(dateKey);
+    setDayMenu(null);
   };
 
   const openDayMenu = (target: HTMLButtonElement, dateKey: string) => {
@@ -173,6 +299,7 @@ const Dashboard = () => {
       top: Math.max(16, Math.min(rect.bottom + 8, window.innerHeight - 280)),
       left: Math.max(16, Math.min(rect.left, window.innerWidth - menuWidth - 16)),
     });
+    setDayMenuSearch('');
   };
 
   const selectSingleDate = (dateKey: string) => {
@@ -195,10 +322,20 @@ const Dashboard = () => {
   };
 
   const selectedDateCount = selectedDateKeys.length;
+  const todayDateKey = toDateKey(new Date());
+  const pickerDateKey = isPastDateKey(selectedDateKey) ? todayDateKey : selectedDateKey;
   const selectedLabel =
     selectedDateCount > 1
       ? `${selectedDateCount} selected days`
       : selectedDateKeys[0] || selectedDateKey;
+
+  const openDatePicker = () => {
+    try {
+      datePickerRef.current?.showPicker?.();
+    } catch {
+      // Some Chromium paths only allow showPicker during a direct pointer gesture.
+    }
+  };
 
   const renderSlotSummary = (slots: ScheduleSlot[]) => {
     if (slots.length === 0) {
@@ -226,16 +363,43 @@ const Dashboard = () => {
       <div className="dashboard-calendar-header">
         <h1 className="text-2xl font-bold text-highlight">Dashboard</h1>
         <div className="dashboard-month-controls">
-          <button className="btn btn-secondary dashboard-month-button" onClick={() => moveVisibleMonth(-1)}>
+          <button className="btn btn-secondary dashboard-month-button" onClick={() => moveVisibleRows(-1)}>
             Prev
           </button>
-          <strong>{visibleMonth.toLocaleString('default', { month: 'long', year: 'numeric' })}</strong>
-          <button className="btn btn-secondary dashboard-month-button" onClick={() => moveVisibleMonth(1)}>
+          <button className="btn btn-secondary dashboard-month-button" onClick={focusToday}>
+            Today
+          </button>
+          <input
+            ref={datePickerRef}
+            className="input input-primary dashboard-date-picker"
+            type="date"
+            min={todayDateKey}
+            value={pickerDateKey}
+            aria-label="Select dashboard date"
+            title={dominantMonthDate.toLocaleString('default', { month: 'long', year: 'numeric' })}
+            onClick={openDatePicker}
+            onFocus={openDatePicker}
+            onChange={(event) => selectDateFromPicker(event.target.value)}
+          />
+          <button className="btn btn-secondary dashboard-month-button" onClick={() => moveVisibleRows(1)}>
             Next
           </button>
         </div>
       </div>
 
+      {isLoadingSchedule && (
+        <div className="async-page-state" role="status">
+          <div className="startup-spinner" />
+          <span>Loading dashboard</span>
+        </div>
+      )}
+      {!isLoadingSchedule && scheduleLoadError && (
+        <div className="async-page-state error" role="alert">
+          <span>{scheduleLoadError}</span>
+        </div>
+      )}
+
+      {!isLoadingSchedule && !scheduleLoadError && (
       <div className="dashboard-calendar-layout" ref={calendarLayoutRef}>
         <aside className="dashboard-day-panel card">
           <div className="dashboard-panel-header">
@@ -268,7 +432,7 @@ const Dashboard = () => {
 
         </aside>
 
-        <section className="dashboard-calendar-main">
+        <section className="dashboard-calendar-main" ref={calendarMainRef}>
           <div className="dashboard-calendar-shell">
           <div className="dashboard-weekdays">
             {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (
@@ -280,10 +444,13 @@ const Dashboard = () => {
               const dayItems = groupedItems[day.dateKey] || { todos: [], tasks: [] };
               const isPastDay = isPastDateKey(day.dateKey);
               const isSelected = selectedDateKeys.includes(day.dateKey);
+              const isDominantMonth =
+                day.date.getFullYear() === dominantMonthDate.getFullYear() &&
+                day.date.getMonth() === dominantMonthDate.getMonth();
               return (
                 <button
                   key={day.dateKey}
-                  className={`dashboard-day ${day.isCurrentMonth ? '' : 'muted'} ${day.isToday ? 'today' : ''} ${
+                  className={`dashboard-day ${isDominantMonth ? 'dominant-month' : 'muted'} ${day.isToday ? 'today' : ''} ${
                     isSelected ? 'selected' : ''
                   } ${isPastDay ? 'disabled' : ''}`}
                   disabled={isPastDay}
@@ -339,33 +506,46 @@ const Dashboard = () => {
               <div className="dashboard-day-menu-title">
                 Add to {selectedDateCount > 1 ? `${selectedDateCount} days` : dayMenu.dateKey}
               </div>
+              <div className="dashboard-day-menu-search">
+                <input
+                  className="input input-primary"
+                  value={dayMenuSearch}
+                  placeholder="Search TodoFlows"
+                  onChange={(event) => setDayMenuSearch(event.target.value)}
+                />
+              </div>
+              <div className="dashboard-day-menu-section">
+                Existing TodoFlows ({assignableTodos.length})
+              </div>
+              {assignableTodos.length === 0 ? (
+                <div className="context-menu-item dashboard-menu-empty">
+                  No TodoFlows with {selectedDateCount} assigned {selectedDateCount === 1 ? 'day' : 'days'}.
+                </div>
+              ) : (
+                assignableTodos.map((todo) => (
+                  <button
+                    key={todo.id}
+                    type="button"
+                    className="context-menu-item dashboard-menu-entry"
+                    onClick={() => openScheduleEditor({ todoId: todo.id, dateKeys: selectedDateKeys })}
+                  >
+                    <span className="dashboard-menu-label">{todo.note || 'TodoFlow'}</span>
+                    <DateChipList labels={formatDateChipLabels(getTodoScheduleDateKeys(todo))} className="dashboard-menu-date-chips" />
+                  </button>
+                ))
+              )}
               <button
                 type="button"
                 className="context-menu-item dashboard-menu-entry dashboard-create-todo"
                 onClick={() => openScheduleEditor()}
               >
-                Create {selectedDateCount > 1 ? `${selectedDateCount} TodoFlows` : 'TodoFlow'}
+                Create TodoFlow
               </button>
-              <div className="context-menu-divider" />
-              <div className="dashboard-day-menu-section">TodoFlows</div>
-              {groupedItems.unscheduled.todos.length === 0 ? (
-                <div className="context-menu-item dashboard-menu-empty">No TodoFlows available</div>
-              ) : (
-                groupedItems.unscheduled.todos.map((todo) => (
-                  <button
-                    key={todo.id}
-                    type="button"
-                    className="context-menu-item dashboard-menu-entry"
-                    onClick={() => openScheduleEditor({ todoId: todo.id })}
-                  >
-                    <span className="dashboard-menu-label">{todo.note}</span>
-                  </button>
-                ))
-              )}
             </div>
           )}
         </section>
       </div>
+      )}
     </div>
   );
 };

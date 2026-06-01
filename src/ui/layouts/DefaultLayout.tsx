@@ -74,7 +74,9 @@ const DefaultLayout = ({ children }: DefaultLayoutProps) => {
         </div>
       </nav>
       <main className="main-content-area">
-        {children}
+        <div key={location.pathname} className="page-transition">
+          {children}
+        </div>
       </main>
     </div>
   );
